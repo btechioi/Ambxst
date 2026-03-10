@@ -19,7 +19,6 @@ QtObject {
         _initialized = true;
         checkCapabilitiesProcess.running = true;
         xdgVideosProcess.running = true;
-        checkProcess.running = true;
     }
 
     property Process checkCapabilitiesProcess: Process {
@@ -153,7 +152,6 @@ QtObject {
         onExited: exitCode => {
             notifyStartProcess.running = true;
             startProcess.running = true;
-            root.isRecording = true;
         }
     }
 

@@ -1,64 +1,38 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import qs.modules.services
+import Quickshell.Hyprland
 import qs.config
-import qs.modules.bar.workspaces // For CompositorData
+import qs.modules.bar.workspaces // For HyprlandData
 
 PanelWindow {
     id: screenCorners
 
-    property var monitor: null
-    property bool activeWindowFullscreen: false
+    readonly property var monitor: Hyprland.monitorFor(screen);
 
-    function updateFullscreen() {
-        const mon = AxctlService.monitorFor(screen);
-        if (mon) {
-            monitor = mon;
-        }
-
-        if (!monitor) {
-            activeWindowFullscreen = false;
-            return;
-        }
+    // Fullscreen detection
+    readonly property bool activeWindowFullscreen: {
+        if (!monitor || !monitor.activeWorkspace)
+            return false;
 
         const activeWorkspaceId = monitor.activeWorkspace.id;
         const monId = monitor.id;
 
         // Check active toplevel first (fast path)
         const toplevel = ToplevelManager.activeToplevel;
-        if (toplevel && toplevel.fullscreen && AxctlService.focusedMonitor && AxctlService.focusedMonitor.id === monId) {
-            activeWindowFullscreen = true;
-            return;
+        if (toplevel && toplevel.fullscreen && Hyprland.focusedMonitor && Hyprland.focusedMonitor.id === monId) {
+            return true;
         }
 
         // Check all windows on this monitor (robust path)
-        const wins = CompositorData.windowList;
+        const wins = HyprlandData.windowList;
         for (let i = 0; i < wins.length; i++) {
             if (wins[i].monitor === monId && wins[i].fullscreen && wins[i].workspace.id === activeWorkspaceId) {
-                activeWindowFullscreen = true;
-                return;
+                return true;
             }
         }
-        activeWindowFullscreen = false;
+        return false;
     }
-
-    Connections {
-        target: AxctlService.monitors
-        function onValuesChanged() { screenCorners.updateFullscreen(); }
-    }
-
-    Connections {
-        target: CompositorData
-        function onWindowListChanged() { screenCorners.updateFullscreen(); }
-    }
-
-    Connections {
-        target: AxctlService
-        function onFocusedMonitorChanged() { screenCorners.updateFullscreen(); }
-    }
-
-    Component.onCompleted: updateFullscreen()
 
     visible: Config.theme.enableCorners && Config.roundness > 0 && !activeWindowFullscreen
 

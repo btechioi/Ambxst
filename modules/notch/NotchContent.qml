@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import qs.modules.globals
 import qs.modules.theme
 import qs.modules.widgets.defaultview
@@ -24,18 +25,31 @@ Item {
 
     // Get this screen's visibility state
     readonly property var screenVisibilities: Visibilities.getForScreen(screen.name)
-    readonly property bool isScreenFocused: AxctlService.focusedMonitor && AxctlService.focusedMonitor.name === screen.name
+    readonly property bool isScreenFocused: Hyprland.focusedMonitor && Hyprland.focusedMonitor.name === screen.name
 
     // Monitor reference and refrence to toplevels on monitor
-    readonly property var compositorMonitor: AxctlService.monitorFor(screen)
-    readonly property var toplevels: (!compositorMonitor || !compositorMonitor.activeWorkspace || !AxctlService.clients.values) ? [] : AxctlService.clients.values.filter(c => c.workspace.id === compositorMonitor.activeWorkspace.id)
+    readonly property var hyprlandMonitor: Hyprland.monitorFor(screen)
+    readonly property var toplevels: (hyprlandMonitor && hyprlandMonitor.activeWorkspace) ? hyprlandMonitor.activeWorkspace.toplevels.values : []
 
     // Check if there are any windows on the current monitor and workspace
-    readonly property bool hasWindows: toplevels.length > 0
+    readonly property bool hasWindows: {
+        if (!hyprlandMonitor || !hyprlandMonitor.activeWorkspace) return false;
+        const activeWorkspaceId = hyprlandMonitor.activeWorkspace.id;
+        const monId = hyprlandMonitor.id;
+        const wins = HyprlandData.windowList;
+        for (let i = 0; i < wins.length; i++) {
+            // We only care about windows on the current monitor and workspace
+            // that are not floating (floating windows usually don't trigger auto-hide)
+            if (wins[i].monitor === monId && wins[i].workspace.id === activeWorkspaceId && !wins[i].floating) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // Get the bar position for this screen
-    readonly property string barPosition: (Config.bar && Config.bar.position !== undefined) ? Config.bar.position : "top"
-    readonly property string notchPosition: Config.notchPosition !== undefined ? Config.notchPosition : "top"
+    readonly property string barPosition: Config.bar?.position ?? "top"
+    readonly property string notchPosition: Config.notchPosition ?? "top"
 
     // Get the bar panel for this screen to check its state
     readonly property var barPanelRef: Visibilities.barPanels[screen.name]
@@ -47,9 +61,9 @@ Item {
             return barPanelRef.pinned;
         }
         // Fallback to config only if panel ref is missing
-        return (Config.bar && Config.bar.pinnedOnStartup !== undefined) ? Config.bar.pinnedOnStartup : true;
+        return Config.bar?.pinnedOnStartup ?? true;
     }
-    
+
     // Check if bar is hovering (for synchronized reveal when bar is at same side)
     readonly property bool barHoverActive: {
         if (barPosition !== notchPosition)
@@ -60,17 +74,18 @@ Item {
         return false;
     }
 
-    // Fullscreen detection - use parent panel's robust detection, fallback to ToplevelManager
+    // Fullscreen detection - check if active toplevel is fullscreen on this screen
     readonly property bool activeWindowFullscreen: {
-        // Prefer the parent UnifiedShellPanel's hasFullscreenWindow (checks both ToplevelManager + CompositorData)
-        if (barPanelRef && typeof barPanelRef.hasFullscreenWindow !== 'undefined') {
-            return barPanelRef.hasFullscreenWindow;
+        if (!hyprlandMonitor || !hyprlandMonitor.activeWorkspace || !toplevels) return false;
+
+        // Check all toplevels on active workspcace
+        for (var i = 0; i < toplevels.length; i++) {
+            // Checks first if the wayland handle is ready
+            if (toplevels[i].wayland && toplevels[i].wayland.fullscreen == true) {
+               return true;
+            }
         }
-        // Fallback: use ToplevelManager (native Wayland) like the bar does
-        const toplevel = ToplevelManager.activeToplevel;
-        if (!toplevel || !toplevel.activated)
-            return false;
-        return toplevel.fullscreen === true;
+        return false;
     }
 
     // Should auto-hide logic:
@@ -78,7 +93,7 @@ Item {
     // 2. If notch and bar are on same side: hide only if bar is unpinned OR if fullscreen is present
     readonly property bool shouldAutoHide: {
         if (barPosition !== notchPosition) {
-            if ((Config.notch && Config.notch.keepHidden !== undefined) ? Config.notch.keepHidden : false) return true;
+            if (Config.notch?.keepHidden ?? false) return true;
             return hasWindows || activeWindowFullscreen;
         }
         return !barPinned || activeWindowFullscreen;
@@ -101,14 +116,8 @@ Item {
     readonly property bool reveal: {
         // If keepHidden is true, ONLY show on interaction
         // UNLESS notch and bar are on same side (e.g. both top), then keepHidden is IGNORED for sync consistency
-        if (((Config.notch && Config.notch.keepHidden !== undefined) ? Config.notch.keepHidden : false) && barPosition !== notchPosition) {
+        if ((Config.notch?.keepHidden ?? false) && barPosition !== notchPosition) {
             return (screenNotchOpen || hasActiveNotifications || hoverActive || barHoverActive);
-        }
-
-        // If fullscreen and bar is NOT available on fullscreen, hard-hide the notch too
-        // This prevents barHoverActive from leaking through when the bar itself is hidden
-        if (activeWindowFullscreen && !(Config.bar && Config.bar.availableOnFullscreen !== undefined ? Config.bar.availableOnFullscreen : false)) {
-            return false;
         }
 
         // If not auto-hiding (pinned and not fullscreen), always show
@@ -195,7 +204,7 @@ Item {
 
         // Width follows the notch, height is small hover region when hidden
         width: notchRegionContainer.width + 20
-        height: root.reveal ? notchRegionContainer.height : Math.max((Config.notch && Config.notch.hoverRegionHeight !== undefined) ? Config.notch.hoverRegionHeight : 8, 8)
+        height: root.reveal ? notchRegionContainer.height : Math.max(Config.notch?.hoverRegionHeight ?? 8, 8)
 
         x: (parent.width - width) / 2
         y: root.notchPosition === "top" ? 0 : parent.height - height
@@ -277,7 +286,7 @@ Item {
                 anchors.top: root.notchPosition === "top" ? parent.top : undefined
                 anchors.bottom: root.notchPosition === "bottom" ? parent.bottom : undefined
 
-                readonly property int frameOffset: (Config.bar && Config.bar.frameEnabled && !root.activeWindowFullscreen) ? ((Config.bar.frameThickness !== undefined) ? Config.bar.frameThickness : 6) : 0
+                readonly property int frameOffset: Config.bar?.frameEnabled ? (Config.bar?.frameThickness ?? 6) : 0
 
                 anchors.topMargin: (root.notchPosition === "top" ? (Config.notchTheme === "default" ? 0 : (Config.notchTheme === "island" ? 4 : 0)) : 0) + (root.notchPosition === "top" ? frameOffset : 0)
                 anchors.bottomMargin: (root.notchPosition === "bottom" ? (Config.notchTheme === "default" ? 0 : (Config.notchTheme === "island" ? 4 : 0)) : 0) + (root.notchPosition === "bottom" ? frameOffset : 0)
