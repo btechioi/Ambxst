@@ -3,12 +3,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import qs.modules.theme
 import qs.config
+import qs.modules.components
 
 Button {
     id: root
 
     property string textStr: ""
-    
+
     // Clean text logic from ContextMenu.qml
     readonly property string cleanText: {
         let t = textStr;
@@ -23,7 +24,14 @@ Button {
     property var iconSource: ""
     property bool isImageIcon: false
     property bool isSeparator: false
-    
+    property bool hasSubmenu: false
+    property bool expanded: false
+    property int depth: 0
+    // 0 = None, 1 = CheckBox, 2 = RadioButton
+    property int buttonType: 0
+    // Qt.Unchecked = 0, Qt.PartiallyChecked = 1, Qt.Checked = 2
+    property int checkState: 0
+
     implicitWidth: 200
     implicitHeight: isSeparator ? 10 : 36
     enabled: !isSeparator
@@ -36,7 +44,7 @@ Button {
             return root.hovered ? Styling.srItem("overprimary") : "transparent"
         }
         radius: Styling.radius(0)
-        
+
         // Separator line
         Rectangle {
             visible: root.isSeparator
@@ -50,31 +58,59 @@ Button {
     contentItem: RowLayout {
         spacing: 8
         visible: !root.isSeparator
-        
+
         // Add margins for content
         anchors.fill: parent
-        anchors.leftMargin: 8
+        anchors.leftMargin: 8 + root.depth * 12
         anchors.rightMargin: 8
-        
+
+        // Check/Radio indicator
+        Text {
+            visible: root.buttonType > 0
+            Layout.preferredWidth: 16
+            Layout.preferredHeight: 16
+            text: root.buttonType === 2
+                ? (root.checkState === 2 ? "\u25C9" : "\u25CB")
+                : (root.checkState === 2 ? "\u2611" : "\u2610")
+            font.pixelSize: 14
+            color: root.hovered ? Colors.overPrimary : Colors.overBackground
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
         // Icon
         Loader {
             Layout.preferredWidth: 16
             Layout.preferredHeight: 16
-            visible: root.iconSource !== ""
+            visible: root.iconSource !== "" && root.buttonType === 0
             sourceComponent: root.isImageIcon ? imageIcon : fontIcon
-            
+
             Component {
                 id: fontIcon
-                Text {
-                    text: root.iconSource
-                    font.family: Icons.font
-                    font.pixelSize: 14
-                    color: root.hovered ? Colors.overPrimary : Colors.overBackground
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                Item {
+                    width: 16
+                    height: 16
+
+                    Text {
+                        id: menuIcon
+                        anchors.fill: parent
+                        text: root.iconSource
+                        font.family: Icons.font
+                        font.pixelSize: 14
+                        color: root.hovered ? Colors.overPrimary : Colors.overBackground
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Tinted {
+                        anchors.fill: parent
+                        sourceItem: menuIcon
+                        active: Config.tintIcons
+                        fullTint: false
+                    }
                 }
             }
-            
+
             Component {
                 id: imageIcon
                 Image {
@@ -84,7 +120,7 @@ Button {
                 }
             }
         }
-        
+
         // Text
         Text {
             Layout.fillWidth: true
@@ -93,6 +129,15 @@ Button {
             font.family: Config.theme.font
             font.pixelSize: Styling.fontSize(0)
             elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        // Submenu chevron
+        Text {
+            visible: root.hasSubmenu
+            text: root.expanded ? "\u25BE" : "\u25B8"
+            color: root.hovered ? Colors.overPrimary : Colors.overBackground
+            font.pixelSize: Styling.fontSize(0)
             verticalAlignment: Text.AlignVCenter
         }
     }

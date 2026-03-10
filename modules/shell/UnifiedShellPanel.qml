@@ -76,7 +76,7 @@ PanelWindow {
 
     readonly property var hyprlandMonitor: Hyprland.monitorFor(targetScreen)
     readonly property bool hasFullscreenWindow: {
-        if (!hyprlandMonitor)
+        if (!hyprlandMonitor || !hyprlandMonitor.activeWorkspace)
             return false;
 
         const activeWorkspaceId = hyprlandMonitor.activeWorkspace.id;
@@ -84,7 +84,7 @@ PanelWindow {
 
         // Check active toplevel first (fast path)
         const toplevel = ToplevelManager.activeToplevel;
-        if (toplevel && toplevel.fullscreen && Hyprland.focusedMonitor.id === monId) {
+        if (toplevel && toplevel.fullscreen && Hyprland.focusedMonitor && Hyprland.focusedMonitor.id === monId) {
             return true;
         }
 

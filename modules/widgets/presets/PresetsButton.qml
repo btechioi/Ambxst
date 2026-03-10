@@ -8,6 +8,8 @@ import qs.modules.theme
 ToggleButton {
     buttonIcon: Icons.magicWand
     tooltipText: "Open Presets Manager"
+    iconTint: Config.tintIcons
+    iconFullTint: false
 
     onToggle: function () {
         if (GlobalStates.presetsOpen) {

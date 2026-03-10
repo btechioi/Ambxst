@@ -12,7 +12,7 @@ PanelWindow {
 
     // Fullscreen detection
     readonly property bool activeWindowFullscreen: {
-        if (!monitor)
+        if (!monitor || !monitor.activeWorkspace)
             return false;
 
         const activeWorkspaceId = monitor.activeWorkspace.id;
@@ -20,7 +20,7 @@ PanelWindow {
 
         // Check active toplevel first (fast path)
         const toplevel = ToplevelManager.activeToplevel;
-        if (toplevel && toplevel.fullscreen && Hyprland.focusedMonitor.id === monId) {
+        if (toplevel && toplevel.fullscreen && Hyprland.focusedMonitor && Hyprland.focusedMonitor.id === monId) {
             return true;
         }
 

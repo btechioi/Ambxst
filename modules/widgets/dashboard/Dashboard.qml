@@ -122,6 +122,9 @@ NotchAnimationBehavior {
                 stack.currentItem.focusSearchInput();
             }
         }
+        Component.onDestruction: {
+            running = false;
+        }
     }
 
     // Escuchar cambios en dashboardCurrentTab para navegar automáticamente

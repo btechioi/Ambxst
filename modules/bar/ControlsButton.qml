@@ -57,12 +57,27 @@ Item {
             }
         }
 
-        Text {
+        Item {
+            id: iconContainer
             anchors.centerIn: parent
-            text: Icons.faders
-            font.family: Icons.font
-            font.pixelSize: 18
-            color: root.popupOpen ? buttonBg.item : Styling.srItem("overprimary")
+            width: 18
+            height: 18
+
+            Text {
+                id: fadersIcon
+                anchors.fill: parent
+                text: Icons.faders
+                font.family: Icons.font
+                font.pixelSize: 18
+                color: root.popupOpen ? buttonBg.item : Styling.srItem("overprimary")
+            }
+
+            Tinted {
+                anchors.fill: parent
+                sourceItem: fadersIcon
+                active: Config.tintIcons
+                fullTint: false
+            }
         }
 
         MouseArea {

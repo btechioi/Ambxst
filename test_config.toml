@@ -1,0 +1,5 @@
+[config]
+
+[templates.test]
+input_path = "test_template.json"
+output_path = "/tmp/test_output.json"

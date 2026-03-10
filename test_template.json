@@ -1,0 +1,4 @@
+{
+  "test": "{{colors.primary.default.hex | set_lightness: -2.5}}",
+  "test2": "{{colors.primary.default.hex | lighten: -2.5}}"
+}

@@ -12,6 +12,24 @@ QtObject {
 
     property Process hyprctlProcess: Process {}
 
+    property var currentAnimationConfig: null
+    property Process readAnimationsProcess: Process {
+        command: ["hyprctl", "-j", "animations"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        // hyprctl -j animations returns [animations, beziers]
+                        currentAnimationConfig = parsed;
+                    }
+                } catch (e) {
+                    console.error("HyprlandConfig: Error parsing animations:", e);
+                }
+            }
+        }
+    }
+
     property var barInstances: []
 
     function registerBar(barInstance) {
@@ -53,6 +71,7 @@ QtObject {
     }
 
     function applyHyprlandConfig() {
+        readAnimationsProcess.running = true;
         applyTimer.restart();
     }
 
@@ -117,7 +136,19 @@ QtObject {
         const shadowColorInactiveFormatted = formatColorForHyprland(shadowColorInactiveWithOpacity);
 
         const barOrientation = getBarOrientation();
-        const workspacesAnimation = barOrientation === "vertical" ? "slidefadevert 20%" : "slidefade 20%";
+        let speed = 2.5;
+        let bezier = "default";
+        
+        if (currentAnimationConfig && currentAnimationConfig[0]) {
+            const workspaceAnim = currentAnimationConfig[0].find(anim => anim.name === "workspaces");
+            if (workspaceAnim) {
+                speed = workspaceAnim.speed || speed;
+                bezier = workspaceAnim.bezier || bezier;
+            }
+        }
+
+        const workspacesAnimation = barOrientation === "vertical" ? `slidefadevert 20%` : `slidefade 20%`;
+        const workspaceCommand = `keyword animation workspaces,1,${speed},${bezier},${workspacesAnimation}`;
 
         // Calculate ignorealpha.
         let ignoreAlphaValue = 0.0;
@@ -140,7 +171,7 @@ QtObject {
         batchCommand += ` ; keyword general:col.active_border ${activeColorFormatted}`;
         batchCommand += ` ; keyword general:col.inactive_border ${inactiveColorFormatted}`;
         batchCommand += ` ; keyword general:layout ${GlobalStates.hyprlandLayout}`;
-        batchCommand += ` ; keyword decoration:rounding ${Config.hyprland.rounding}`;
+        batchCommand += ` ; keyword decoration:rounding ${Config.hyprlandRounding}`;
         batchCommand += ` ; keyword decoration:shadow:enabled ${Config.hyprland.shadowEnabled}`;
         batchCommand += ` ; keyword decoration:shadow:range ${Config.hyprland.shadowRange}`;
         batchCommand += ` ; keyword decoration:shadow:render_power ${Config.hyprland.shadowRenderPower}`;
@@ -166,11 +197,16 @@ QtObject {
         batchCommand += ` ; keyword decoration:blur:popups_ignorealpha ${Config.hyprland.blurPopupsIgnorealpha}`;
         batchCommand += ` ; keyword decoration:blur:input_methods ${Config.hyprland.blurInputMethods}`;
         batchCommand += ` ; keyword decoration:blur:input_methods_ignorealpha ${Config.hyprland.blurInputMethodsIgnorealpha}`;
-        // Note: workspacesAnimation is calculated but exact animation param syntax depends on user config, omitting for safety unless we have a default.
+        batchCommand += ` ; keyword bezier myBezier,0.4,0.0,0.2,1.0`;
+        batchCommand += ` ; keyword animation windows,1,2.5,myBezier,popin 80%`;
+        batchCommand += ` ; keyword animation border,1,2.5,myBezier`;
+        batchCommand += ` ; keyword animation fade,1,2.5,myBezier`;
+        batchCommand += ` ; ${workspaceCommand}`;
+        // Note: workspaceCommand is dynamically calculated based on current animations and orientation.
 
         console.log(`HyprlandConfig: Applying ignorealpha: ${ignoreAlphaValue}, explicit: ${Config.hyprland.blurExplicitIgnoreAlpha}`);
         batchCommand += ` ; keyword layerrule noanim,quickshell ; keyword layerrule blur,quickshell ; keyword layerrule blurpopups,quickshell ; keyword layerrule ignorealpha ${ignoreAlphaValue},quickshell`;
-        console.log("HyprlandConfig: Applying hyprctl batch command.");
+        console.log("HyprlandConfig: Applying hyprctl batch command:", batchCommand);
         hyprctlProcess.command = ["hyprctl", "--batch", batchCommand];
         hyprctlProcess.running = true;
     }

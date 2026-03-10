@@ -21,7 +21,7 @@ MouseArea {
     Layout.fillWidth: bar.orientation === "vertical"
     implicitWidth: trayItemSize
     implicitHeight: trayItemSize
-    
+
     onClicked: event => {
         switch (event.button) {
         case Qt.LeftButton:
@@ -40,13 +40,13 @@ MouseArea {
         id: systrayPopup
         anchorItem: root
         bar: root.bar
-        
+
         // Use a reasonable width for the menu
         contentWidth: 220
         // Height adapts to content, with a max limit if needed.
         // Must include vertical padding (8 top + 8 bottom = 16)
         contentHeight: Math.min(itemsColumn.implicitHeight + 16, 400)
-        
+
         popupPadding: 8
         // 8px standard margin + 8px SysTray container padding to ensure correct offset from the main bar
         visualMargin: 16
@@ -61,9 +61,9 @@ MouseArea {
             anchors.fill: parent
             contentWidth: availableWidth
             clip: true
-            
+
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            
+
             ColumnLayout {
                 id: itemsColumn
                 width: parent.width
@@ -71,25 +71,78 @@ MouseArea {
 
                 Repeater {
                     model: menuOpener.children ? menuOpener.children.values : []
-                    
-                    delegate: SystrayMenuItem {
+
+                    delegate: ColumnLayout {
                         required property var modelData
-                        
+
                         Layout.fillWidth: true
-                        
-                        textStr: modelData.text || ""
-                        iconSource: modelData.icon || ""
-                        // Simple heuristic for image icon
-                        isImageIcon: iconSource.indexOf("/") !== -1 || iconSource.indexOf(".") !== -1
-                        isSeparator: modelData.isSeparator || false
-                        
-                        onClicked: {
-                            if (modelData.triggered) {
-                                modelData.triggered();
-                            } else if (modelData.activate) {
-                                modelData.activate();
+                        spacing: 2
+
+                        property bool submenuExpanded: false
+
+                        SystrayMenuItem {
+                            Layout.fillWidth: true
+
+                            textStr: modelData.text || ""
+                            iconSource: modelData.icon || ""
+                            isImageIcon: iconSource.indexOf("/") !== -1 || iconSource.indexOf(".") !== -1
+                            isSeparator: modelData.isSeparator || false
+                            hasSubmenu: modelData.hasChildren || false
+                            expanded: parent.submenuExpanded
+                            buttonType: modelData.buttonType || 0
+                            checkState: modelData.checkState || 0
+
+                            onClicked: {
+                                if (modelData.hasChildren) {
+                                    parent.submenuExpanded = !parent.submenuExpanded;
+                                } else {
+                                    if (modelData.triggered) {
+                                        modelData.triggered();
+                                    } else if (modelData.activate) {
+                                        modelData.activate();
+                                    }
+                                    systrayPopup.close();
+                                }
                             }
-                            systrayPopup.close();
+                        }
+
+                        // Submenu children — uses its own QsMenuOpener to trigger lazy loading
+                        ColumnLayout {
+                            visible: submenuExpanded && modelData.hasChildren
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            QsMenuOpener {
+                                id: subMenuOpener
+                                menu: modelData.hasChildren ? modelData : null
+                            }
+
+                            Repeater {
+                                model: subMenuOpener.children ? subMenuOpener.children.values : []
+
+                                delegate: SystrayMenuItem {
+                                    required property var modelData
+
+                                    Layout.fillWidth: true
+                                    depth: 1
+
+                                    textStr: modelData.text || ""
+                                    iconSource: modelData.icon || ""
+                                    isImageIcon: iconSource.indexOf("/") !== -1 || iconSource.indexOf(".") !== -1
+                                    isSeparator: modelData.isSeparator || false
+                                    buttonType: modelData.buttonType || 0
+                                    checkState: modelData.checkState || 0
+
+                                    onClicked: {
+                                        if (modelData.triggered) {
+                                            modelData.triggered();
+                                        } else if (modelData.activate) {
+                                            modelData.activate();
+                                        }
+                                        systrayPopup.close();
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -115,5 +168,6 @@ MouseArea {
     Tinted {
         sourceItem: trayIcon
         anchors.fill: trayIcon
+        active: Config.tintIcons
     }
 }

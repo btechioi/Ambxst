@@ -73,9 +73,23 @@ Rectangle {
         // Limit zoom range: 0.2 (show all available) to 3.0 (zoom in)
         chartZoom = Math.max(0.2, Math.min(3.0, savedZoom));
 
+        // Start essential readers immediately
         hostnameReader.running = true;
         osReader.running = true;
-        linuxLogosReader.running = true;
+        // Lazy-load linux logos only when tab becomes visible
+        if (visible) {
+            linuxLogosReader.running = true;
+        }
+    }
+
+    // Load Linux logos JSON only when tab is visible
+    onVisibleChanged: {
+        if (visible && !linuxLogosReader.running) {
+            linuxLogosReader.running = true;
+        }
+        if (visible) {
+            chartCanvas.requestPaint();
+        }
     }
 
     // Load Linux logos JSON
@@ -141,12 +155,6 @@ Rectangle {
         }
     }
 
-    // Update chart when becoming visible
-    onVisibleChanged: {
-        if (visible)
-            chartCanvas.requestPaint();
-    }
-
     // Watch for history changes to repaint chart
     Connections {
         target: SystemResources
@@ -194,6 +202,9 @@ Rectangle {
                             fillMode: Image.PreserveAspectCrop
                             smooth: true
                             asynchronous: true
+                            sourceSize.width: 96
+                            sourceSize.height: 96
+                            cache: true
                             visible: status === Image.Ready
 
                             layer.enabled: true

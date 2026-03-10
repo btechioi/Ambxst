@@ -676,9 +676,9 @@ FocusScope {
                 highlightFollowsCurrentItem: !isScrolling
 
                 // Optimizaciones de rendimiento
-                cacheBuffer: cellHeight
-                displayMarginBeginning: cellHeight
-                displayMarginEnd: cellHeight
+                cacheBuffer: cellHeight * 3
+                displayMarginBeginning: cellHeight * 2
+                displayMarginEnd: cellHeight * 2
                 reuseItems: true
 
                 // Configuración de scroll optimizada
@@ -1003,7 +1003,7 @@ FocusScope {
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             smooth: true
-            cache: false // Deshabilitar cache para reducir uso de RAM
+            cache: true // Enable caching - Qt's cache is efficient and reduces CPU/GPU overhead
             sourceSize.width: wallpaperGridContainer.cellSize
             sourceSize.height: wallpaperGridContainer.cellSize
 

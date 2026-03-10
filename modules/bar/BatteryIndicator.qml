@@ -152,29 +152,43 @@ Item {
         }
 
         // Central icon (Lightning/Plug for battery, PowerProfile icon otherwise)
-        Text {
-            id: batteryIcon
+        Item {
+            id: batteryIconContainer
             anchors.centerIn: parent
-            text: Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile)
-            font.family: Icons.font
-            font.pixelSize: Battery.available ? 14 : 18
-            color: root.popupOpen ? buttonBg.item : Colors.overBackground
+            width: Battery.available ? 14 : 18
+            height: Battery.available ? 14 : 18
 
-            Behavior on color {
-                enabled: Config.animDuration > 0
-                ColorAnimation {
-                    duration: Config.animDuration / 2
+            Text {
+                id: batteryIcon
+                anchors.fill: parent
+                text: Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile)
+                font.family: Icons.font
+                font.pixelSize: Battery.available ? 14 : 18
+                color: root.popupOpen ? buttonBg.item : Colors.overBackground
+
+                Behavior on color {
+                    enabled: Config.animDuration > 0
+                    ColorAnimation {
+                        duration: Config.animDuration / 2
+                    }
+                }
+
+                Connections {
+                    target: Battery
+                    function onIsPluggedInChanged() {
+                        batteryIcon.text = Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile);
+                    }
+                    function onAvailableChanged() {
+                        batteryIcon.text = Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile);
+                    }
                 }
             }
 
-            Connections {
-                target: Battery
-                function onIsPluggedInChanged() {
-                    batteryIcon.text = Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile);
-                }
-                function onAvailableChanged() {
-                    batteryIcon.text = Battery.available ? (Battery.isPluggedIn ? Icons.plug : Icons.lightning) : PowerProfile.getProfileIcon(PowerProfile.currentProfile);
-                }
+            Tinted {
+                anchors.fill: parent
+                sourceItem: batteryIcon
+                active: Config.tintIcons
+                fullTint: false
             }
         }
 
@@ -224,12 +238,26 @@ Item {
                     anchors.bottomMargin: 8
                     spacing: 12
 
-                    Text {
+                    Item {
                         Layout.alignment: Qt.AlignVCenter
-                        text: Battery.getBatteryIcon()
-                        font.family: Icons.font
-                        font.pixelSize: 24
-                        color: root.getBatteryColor()
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+
+                        Text {
+                            id: batteryDetailIcon
+                            anchors.fill: parent
+                            text: Battery.getBatteryIcon()
+                            font.family: Icons.font
+                            font.pixelSize: 24
+                            color: root.getBatteryColor()
+                        }
+
+                        Tinted {
+                            anchors.fill: parent
+                            sourceItem: batteryDetailIcon
+                            active: Config.tintIcons
+                            fullTint: false
+                        }
                     }
 
                     ColumnLayout {
@@ -305,12 +333,26 @@ Item {
                         topRightRadius: isSelected ? (isLast ? defaultRadius : selectedRadius) : defaultRadius
                         bottomRightRadius: isSelected ? (isLast ? defaultRadius : selectedRadius) : defaultRadius
 
-                        Text {
+                        Item {
                             anchors.centerIn: parent
-                            text: PowerProfile.getProfileIcon(profileButton.modelData)
-                            font.family: Icons.font
-                            font.pixelSize: 18
-                            color: profileButton.item
+                            width: 18
+                            height: 18
+
+                            Text {
+                                id: profileIcon
+                                anchors.fill: parent
+                                text: PowerProfile.getProfileIcon(profileButton.modelData)
+                                font.family: Icons.font
+                                font.pixelSize: 18
+                                color: profileButton.item
+                            }
+
+                            Tinted {
+                                anchors.fill: parent
+                                sourceItem: profileIcon
+                                active: Config.tintIcons
+                                fullTint: false
+                            }
                         }
 
                         MouseArea {

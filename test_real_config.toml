@@ -1,0 +1,5 @@
+[config]
+
+[templates.ambxst]
+input_path = "assets/matugen/colors.json"
+output_path = "/tmp/ambxst_colors.json"

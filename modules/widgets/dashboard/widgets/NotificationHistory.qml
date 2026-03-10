@@ -122,13 +122,27 @@ Item {
 
                         readonly property color dndItem: Notifications.silent ? itemColor : Styling.srItem("overprimary")
 
-                        Text {
+                        Item {
                             anchors.centerIn: parent
-                            text: Notifications.silent ? Icons.bellZ : Icons.bell
-                            textFormat: Text.RichText
-                            font.family: Icons.font
-                            font.pixelSize: 18
-                            color: dndToggle.dndItem
+                            width: 18
+                            height: 18
+
+                            Text {
+                                id: bellIcon
+                                anchors.fill: parent
+                                text: Notifications.silent ? Icons.bellZ : Icons.bell
+                                textFormat: Text.RichText
+                                font.family: Icons.font
+                                font.pixelSize: 18
+                                color: dndToggle.dndItem
+                            }
+
+                            Tinted {
+                                anchors.fill: parent
+                                sourceItem: bellIcon
+                                active: Config.tintIcons
+                                fullTint: false
+                            }
                         }
 
                         MouseArea {

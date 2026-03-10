@@ -107,6 +107,7 @@ Button {
                     Tinted {
                         sourceItem: appIcon
                         anchors.fill: appIcon
+                        active: Config.tintIcons
                     }
                 }
 
