@@ -2,7 +2,6 @@
 //@ pragma ShellId ambxst
 //@ pragma DataDir $BASE/ambxst
 //@ pragma StateDir $BASE/ambxst
-//@ pragma CacheDir $BASE/ambxst
 
 import QtQuick
 import Quickshell
@@ -90,7 +89,7 @@ ShellRoot {
 
                 // Bar status for reservations
                 barEnabled: {
-                    const list = Config.bar?.screenList ?? [];
+                    const list = (Config.bar && Config.bar.screenList !== undefined ? Config.bar.screenList : []);
                     return (!list || list.length === 0 || list.indexOf(screen.name) !== -1);
                 }
                 barPosition: unifiedPanel.barPosition
@@ -100,10 +99,10 @@ ShellRoot {
 
                 // Dock status for reservations
                 dockEnabled: {
-                    if (!(Config.dock?.enabled ?? false) || (Config.dock?.theme ?? "default") === "integrated")
+                    if (!((Config.dock && Config.dock.enabled !== undefined ? Config.dock.enabled : false)) || (Config.dock && Config.dock.theme !== undefined ? Config.dock.theme : "default") === "integrated")
                         return false;
 
-                    const list = Config.dock?.screenList ?? [];
+                    const list = (Config.dock && Config.dock.screenList !== undefined ? Config.dock.screenList : []);
                     if (!list || list.length === 0)
                         return true;
                     return list.indexOf(screenShellContainer.modelData.name) !== -1;
@@ -113,8 +112,14 @@ ShellRoot {
                 dockHeight: unifiedPanel.dockHeight
                 containBar: unifiedPanel.containBar
 
-                frameEnabled: Config.bar?.frameEnabled ?? false
-                frameThickness: Config.bar?.frameThickness ?? 6
+                frameEnabled: (Config.bar && Config.bar.frameEnabled !== undefined ? Config.bar.frameEnabled : false)
+                frameThickness: (Config.bar && Config.bar.frameThickness !== undefined ? Config.bar.frameThickness : 6)
+
+                // Sidebar status for reservations
+                sidebarEnabled: GlobalStates.assistantVisible && screenShellContainer.modelData.name === GlobalStates.assistantScreenName
+                sidebarPinned: GlobalStates.assistantPinned
+                sidebarWidth: GlobalStates.assistantWidth
+                sidebarPosition: GlobalStates.assistantPosition
             }
         }
     }
@@ -123,7 +128,7 @@ ShellRoot {
     Variants {
         model: {
             const screens = Quickshell.screens;
-            const list = Config.bar?.screenList ?? [];
+            const list = (Config.bar && Config.bar.screenList !== undefined ? Config.bar.screenList : []);
             if (!list || list.length === 0)
                 return screens;
             return screens.filter(screen => list.indexOf(screen.name) !== -1);
@@ -131,7 +136,7 @@ ShellRoot {
 
         Loader {
             id: overviewLoader
-            active: (Config.overview?.enabled ?? true) && SuspendManager.wakeReady && (Visibilities.getForScreen(modelData.name) ? Visibilities.getForScreen(modelData.name).overview : false)
+            active: ((Config.overview && Config.overview.enabled !== undefined ? Config.overview.enabled : true)) && SuspendManager.wakeReady && (Visibilities.getForScreen(modelData.name) ? Visibilities.getForScreen(modelData.name).overview : false)
             required property ShellScreen modelData
             sourceComponent: OverviewPopup {
                 screen: overviewLoader.modelData
@@ -143,7 +148,7 @@ ShellRoot {
     Variants {
         model: {
             const screens = Quickshell.screens;
-            const list = Config.bar?.screenList ?? [];
+            const list = (Config.bar && Config.bar.screenList !== undefined ? Config.bar.screenList : []);
             if (!list || list.length === 0)
                 return screens;
             return screens.filter(screen => list.indexOf(screen.name) !== -1);
@@ -168,12 +173,8 @@ ShellRoot {
         LockScreen {}
     }
 
-    HyprlandConfig {
-        id: hyprlandConfig
-    }
-
-    HyprlandKeybinds {
-        id: hyprlandKeybinds
+    CompositorConfig {
+        id: compositorConfig
     }
 
     // Screenshot tool
@@ -288,7 +289,6 @@ ShellRoot {
                 _ = GlobalShortcuts.appId; // Force init (IPC pipe listener)
             });
         }
-
     }
 
     // Non-critical services — defer 2s after startup

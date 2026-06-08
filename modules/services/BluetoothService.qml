@@ -306,8 +306,8 @@ Singleton {
         running: false
         property string buffer: ""
         environment: ({
-            LANG: "C",
-            LC_ALL: "C"
+            LANG: "C.UTF-8",
+            LC_ALL: "C.UTF-8"
         })
         stdout: SplitParser {
             onRead: data => {
