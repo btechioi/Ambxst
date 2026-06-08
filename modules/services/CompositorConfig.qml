@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
+import qs.modules.services
 import qs.config
 import qs.modules.theme
 import qs.modules.bar
@@ -10,21 +10,21 @@ import qs.modules.globals
 QtObject {
     id: root
 
-    property Process hyprctlProcess: Process {}
+    property Process compositorProcess: Process {}
 
     property var currentAnimationConfig: null
     property Process readAnimationsProcess: Process {
-        command: ["hyprctl", "-j", "animations"]
+        command: ["axctl", "config", "get-animations"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     const parsed = JSON.parse(text);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        // hyprctl -j animations returns [animations, beziers]
+                        // axctl config get-animations returns [animations, beziers]
                         currentAnimationConfig = parsed;
                     }
                 } catch (e) {
-                    console.error("HyprlandConfig: Error parsing animations:", e);
+                    console.error("CompositorConfig: Error parsing animations:", e);
                 }
             }
         }
@@ -47,7 +47,7 @@ QtObject {
     property Timer applyTimer: Timer {
         interval: 100
         repeat: false
-        onTriggered: applyHyprlandConfigInternal()
+        onTriggered: applyCompositorConfigInternal()
     }
 
     function getColorValue(colorName) {
@@ -56,8 +56,8 @@ QtObject {
         return (typeof resolved === 'string') ? Qt.color(resolved) : resolved;
     }
 
-    function formatColorForHyprland(color) {
-        // Hyprland expects colors in format: rgb(rrggbb) or rgba(rrggbbaa)
+    function formatColorForCompositor(color) {
+        // AxctlService expects colors in format: rgb(rrggbb) or rgba(rrggbbaa)
         const r = Math.round(color.r * 255).toString(16).padStart(2, '0');
         const g = Math.round(color.g * 255).toString(16).padStart(2, '0');
         const b = Math.round(color.b * 255).toString(16).padStart(2, '0');
@@ -70,70 +70,70 @@ QtObject {
         }
     }
 
-    function applyHyprlandConfig() {
+    function applyCompositorConfig() {
         readAnimationsProcess.running = true;
         applyTimer.restart();
     }
 
-    function applyHyprlandConfigInternal() {
+    function applyCompositorConfigInternal() {
         // Ensure adapters are loaded before applying config.
         if (!Config.loader.loaded) {
-            console.log("HyprlandConfig: Esperando que se cargue Config...");
+            console.log("CompositorConfig: Esperando que se cargue Config...");
             return;
         }
 
         // Wait for layout to be ready.
-        if (!GlobalStates.hyprlandLayoutReady) {
-            console.log("HyprlandConfig: Esperando que se detecte el layout de Hyprland...");
+        if (!GlobalStates.compositorLayoutReady) {
+            console.log("CompositorConfig: Esperando que se detecte el layout de AxctlService...");
             return;
         }
 
         // Determine active colors.
         let activeColorFormatted = "";
-        // Force hyprlandBorderColor if syncBorderColor is enabled, otherwise use configured list (supports gradients).
-        const borderColors = Config.hyprland.syncBorderColor ? null : Config.hyprland.activeBorderColor;
+        // Force compositorBorderColor if syncBorderColor is enabled, otherwise use configured list (supports gradients).
+        const borderColors = Config.compositor.syncBorderColor ? null : Config.compositor.activeBorderColor;
 
         if (borderColors && borderColors.length > 1) {
             // Multi-color gradient.
             const formattedColors = borderColors.map(colorName => {
                 const color = getColorValue(colorName);
-                return formatColorForHyprland(color);
+                return formatColorForCompositor(color);
             }).join(" ");
-            activeColorFormatted = `${formattedColors} ${Config.hyprland.borderAngle}deg`;
+            activeColorFormatted = `${formattedColors} ${Config.compositor.borderAngle}deg`;
         } else {
-            // Single color: if sync enabled or empty, use hyprlandBorderColor; otherwise use first element.
-            const singleColorName = (borderColors && borderColors.length === 1) ? borderColors[0] : Config.hyprlandBorderColor;
+            // Single color: if sync enabled or empty, use compositorBorderColor; otherwise use first element.
+            const singleColorName = (borderColors && borderColors.length === 1) ? borderColors[0] : Config.compositorBorderColor;
             const activeColor = getColorValue(singleColorName);
-            activeColorFormatted = formatColorForHyprland(activeColor);
+            activeColorFormatted = formatColorForCompositor(activeColor);
         }
 
         // Determine inactive colors.
         let inactiveColorFormatted = "";
-        const inactiveBorderColors = Config.hyprland.inactiveBorderColor;
+        const inactiveBorderColors = Config.compositor.inactiveBorderColor;
 
         if (inactiveBorderColors && inactiveBorderColors.length > 1) {
             // Multi-color gradient.
             const formattedColors = inactiveBorderColors.map(colorName => {
                 const color = getColorValue(colorName);
                 const colorWithFullOpacity = Qt.rgba(color.r, color.g, color.b, 1.0);
-                return formatColorForHyprland(colorWithFullOpacity);
+                return formatColorForCompositor(colorWithFullOpacity);
             }).join(" ");
-            inactiveColorFormatted = `${formattedColors} ${Config.hyprland.inactiveBorderAngle}deg`;
+            inactiveColorFormatted = `${formattedColors} ${Config.compositor.inactiveBorderAngle}deg`;
         } else {
             // Single color.
             const singleColorName = (inactiveBorderColors && inactiveBorderColors.length === 1) ? inactiveBorderColors[0] : "surface";
             const inactiveColor = getColorValue(singleColorName);
             const inactiveColorWithFullOpacity = Qt.rgba(inactiveColor.r, inactiveColor.g, inactiveColor.b, 1.0);
-            inactiveColorFormatted = formatColorForHyprland(inactiveColorWithFullOpacity);
+            inactiveColorFormatted = formatColorForCompositor(inactiveColorWithFullOpacity);
         }
 
         // Shadow colors.
-        const shadowColor = getColorValue(Config.hyprlandShadowColor);
-        const shadowColorInactive = getColorValue(Config.hyprland.shadowColorInactive);
-        const shadowColorWithOpacity = Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shadowColor.a * Config.hyprlandShadowOpacity);
-        const shadowColorInactiveWithOpacity = Qt.rgba(shadowColorInactive.r, shadowColorInactive.g, shadowColorInactive.b, shadowColorInactive.a * Config.hyprlandShadowOpacity);
-        const shadowColorFormatted = formatColorForHyprland(shadowColorWithOpacity);
-        const shadowColorInactiveFormatted = formatColorForHyprland(shadowColorInactiveWithOpacity);
+        const shadowColor = getColorValue(Config.compositorShadowColor);
+        const shadowColorInactive = getColorValue(Config.compositor.shadowColorInactive);
+        const shadowColorWithOpacity = Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shadowColor.a * Config.compositorShadowOpacity);
+        const shadowColorInactiveWithOpacity = Qt.rgba(shadowColorInactive.r, shadowColorInactive.g, shadowColorInactive.b, shadowColorInactive.a * Config.compositorShadowOpacity);
+        const shadowColorFormatted = formatColorForCompositor(shadowColorWithOpacity);
+        const shadowColorInactiveFormatted = formatColorForCompositor(shadowColorInactiveWithOpacity);
 
         const barOrientation = getBarOrientation();
         let speed = 2.5;
@@ -153,50 +153,52 @@ QtObject {
         // Calculate ignorealpha.
         let ignoreAlphaValue = 0.0;
 
-        if (Config.hyprland.blurExplicitIgnoreAlpha) {
-            ignoreAlphaValue = Config.hyprland.blurIgnoreAlphaValue.toFixed(2);
+        if (Config.compositor.blurExplicitIgnoreAlpha) {
+            ignoreAlphaValue = Config.compositor.blurIgnoreAlphaValue.toFixed(2);
         } else {
             // Dynamic ignorealpha based on StyledRect opacity.
             // Use min(barbg, bg) opacity if barbg > 0, else use bg.
             const barBgOpacity = (Config.theme.srBarBg && Config.theme.srBarBg.opacity !== undefined) ? Config.theme.srBarBg.opacity : 0;
             const bgOpacity = (Config.theme.srBg && Config.theme.srBg.opacity !== undefined) ? Config.theme.srBg.opacity : 1.0;
             ignoreAlphaValue = (barBgOpacity > 0 ? Math.min(barBgOpacity, bgOpacity) : bgOpacity).toFixed(2);
-            console.log(`HyprlandConfig: Auto ignorealpha calculated: ${ignoreAlphaValue} (bg: ${bgOpacity}, bar: ${barBgOpacity})`);
+            console.log(`CompositorConfig: Auto ignorealpha calculated: ${ignoreAlphaValue} (bg: ${bgOpacity}, bar: ${barBgOpacity})`);
         }
 
         let batchCommand = "";
-        batchCommand += `keyword general:border_size ${Config.hyprland.borderSize}`;
-        batchCommand += ` ; keyword general:gaps_in ${Config.hyprland.gapsIn}`;
-        batchCommand += ` ; keyword general:gaps_out ${Config.hyprland.gapsOut}`;
+        batchCommand += `keyword general:border_size ${Config.compositorBorderSize}`;
+        batchCommand += ` ; keyword general:gaps_in ${Config.compositor.gapsIn}`;
+        batchCommand += ` ; keyword general:gaps_out ${Config.compositor.gapsOut}`;
         batchCommand += ` ; keyword general:col.active_border ${activeColorFormatted}`;
         batchCommand += ` ; keyword general:col.inactive_border ${inactiveColorFormatted}`;
-        batchCommand += ` ; keyword general:layout ${GlobalStates.hyprlandLayout}`;
-        batchCommand += ` ; keyword decoration:rounding ${Config.hyprlandRounding}`;
-        batchCommand += ` ; keyword decoration:shadow:enabled ${Config.hyprland.shadowEnabled}`;
-        batchCommand += ` ; keyword decoration:shadow:range ${Config.hyprland.shadowRange}`;
-        batchCommand += ` ; keyword decoration:shadow:render_power ${Config.hyprland.shadowRenderPower}`;
-        batchCommand += ` ; keyword decoration:shadow:sharp ${Config.hyprland.shadowSharp}`;
-        batchCommand += ` ; keyword decoration:shadow:ignore_window ${Config.hyprland.shadowIgnoreWindow}`;
+        if (GlobalStates.compositorLayout) {
+            batchCommand += ` ; keyword general:layout ${GlobalStates.compositorLayout}`;
+        }
+        batchCommand += ` ; keyword decoration:rounding ${Config.compositorRounding}`;
+        batchCommand += ` ; keyword decoration:shadow:enabled ${Config.compositor.shadowEnabled}`;
+        batchCommand += ` ; keyword decoration:shadow:range ${Config.compositor.shadowRange}`;
+        batchCommand += ` ; keyword decoration:shadow:render_power ${Config.compositor.shadowRenderPower}`;
+        batchCommand += ` ; keyword decoration:shadow:sharp ${Config.compositor.shadowSharp}`;
+        batchCommand += ` ; keyword decoration:shadow:ignore_window ${Config.compositor.shadowIgnoreWindow}`;
         batchCommand += ` ; keyword decoration:shadow:color ${shadowColorFormatted}`;
         batchCommand += ` ; keyword decoration:shadow:color_inactive ${shadowColorInactiveFormatted}`;
-        batchCommand += ` ; keyword decoration:shadow:offset ${Config.hyprland.shadowOffset}`;
-        batchCommand += ` ; keyword decoration:shadow:scale ${Config.hyprland.shadowScale}`;
-        batchCommand += ` ; keyword decoration:blur:enabled ${Config.hyprland.blurEnabled}`;
-        batchCommand += ` ; keyword decoration:blur:size ${Config.hyprland.blurSize}`;
-        batchCommand += ` ; keyword decoration:blur:passes ${Config.hyprland.blurPasses}`;
-        batchCommand += ` ; keyword decoration:blur:ignore_opacity ${Config.hyprland.blurIgnoreOpacity}`;
-        batchCommand += ` ; keyword decoration:blur:new_optimizations ${Config.hyprland.blurNewOptimizations}`;
-        batchCommand += ` ; keyword decoration:blur:xray ${Config.hyprland.blurXray}`;
-        batchCommand += ` ; keyword decoration:blur:noise ${Config.hyprland.blurNoise}`;
-        batchCommand += ` ; keyword decoration:blur:contrast ${Config.hyprland.blurContrast}`;
-        batchCommand += ` ; keyword decoration:blur:brightness ${Config.hyprland.blurBrightness}`;
-        batchCommand += ` ; keyword decoration:blur:vibrancy ${Config.hyprland.blurVibrancy}`;
-        batchCommand += ` ; keyword decoration:blur:vibrancy_darkness ${Config.hyprland.blurVibrancyDarkness}`;
-        batchCommand += ` ; keyword decoration:blur:special ${Config.hyprland.blurSpecial}`;
-        batchCommand += ` ; keyword decoration:blur:popups ${Config.hyprland.blurPopups}`;
-        batchCommand += ` ; keyword decoration:blur:popups_ignorealpha ${Config.hyprland.blurPopupsIgnorealpha}`;
-        batchCommand += ` ; keyword decoration:blur:input_methods ${Config.hyprland.blurInputMethods}`;
-        batchCommand += ` ; keyword decoration:blur:input_methods_ignorealpha ${Config.hyprland.blurInputMethodsIgnorealpha}`;
+        batchCommand += ` ; keyword decoration:shadow:offset ${Config.compositor.shadowOffset}`;
+        batchCommand += ` ; keyword decoration:shadow:scale ${Config.compositor.shadowScale}`;
+        batchCommand += ` ; keyword decoration:blur:enabled ${Config.compositor.blurEnabled}`;
+        batchCommand += ` ; keyword decoration:blur:size ${Config.compositor.blurSize}`;
+        batchCommand += ` ; keyword decoration:blur:passes ${Config.compositor.blurPasses}`;
+        batchCommand += ` ; keyword decoration:blur:ignore_opacity ${Config.compositor.blurIgnoreOpacity}`;
+        batchCommand += ` ; keyword decoration:blur:new_optimizations ${Config.compositor.blurNewOptimizations}`;
+        batchCommand += ` ; keyword decoration:blur:xray ${Config.compositor.blurXray}`;
+        batchCommand += ` ; keyword decoration:blur:noise ${Config.compositor.blurNoise}`;
+        batchCommand += ` ; keyword decoration:blur:contrast ${Config.compositor.blurContrast}`;
+        batchCommand += ` ; keyword decoration:blur:brightness ${Config.compositor.blurBrightness}`;
+        batchCommand += ` ; keyword decoration:blur:vibrancy ${Config.compositor.blurVibrancy}`;
+        batchCommand += ` ; keyword decoration:blur:vibrancy_darkness ${Config.compositor.blurVibrancyDarkness}`;
+        batchCommand += ` ; keyword decoration:blur:special ${Config.compositor.blurSpecial}`;
+        batchCommand += ` ; keyword decoration:blur:popups ${Config.compositor.blurPopups}`;
+        batchCommand += ` ; keyword decoration:blur:popups_ignorealpha ${Config.compositor.blurPopupsIgnorealpha}`;
+        batchCommand += ` ; keyword decoration:blur:input_methods ${Config.compositor.blurInputMethods}`;
+        batchCommand += ` ; keyword decoration:blur:input_methods_ignorealpha ${Config.compositor.blurInputMethodsIgnorealpha}`;
         batchCommand += ` ; keyword bezier myBezier,0.4,0.0,0.2,1.0`;
         batchCommand += ` ; keyword animation windows,1,2.5,myBezier,popin 80%`;
         batchCommand += ` ; keyword animation border,1,2.5,myBezier`;
@@ -204,210 +206,198 @@ QtObject {
         batchCommand += ` ; ${workspaceCommand}`;
         // Note: workspaceCommand is dynamically calculated based on current animations and orientation.
 
-        console.log(`HyprlandConfig: Applying ignorealpha: ${ignoreAlphaValue}, explicit: ${Config.hyprland.blurExplicitIgnoreAlpha}`);
+        console.log(`CompositorConfig: Applying ignorealpha: ${ignoreAlphaValue}, explicit: ${Config.compositor.blurExplicitIgnoreAlpha}`);
         batchCommand += ` ; keyword layerrule noanim,quickshell ; keyword layerrule blur,quickshell ; keyword layerrule blurpopups,quickshell ; keyword layerrule ignorealpha ${ignoreAlphaValue},quickshell`;
-        console.log("HyprlandConfig: Applying hyprctl batch command:", batchCommand);
-        hyprctlProcess.command = ["hyprctl", "--batch", batchCommand];
-        hyprctlProcess.running = true;
+        console.log("CompositorConfig: Refreshing TOML via CompositorTomlWriter");
+        CompositorTomlWriter.refresh();
     }
 
     property Connections configConnections: Connections {
         target: Config.loader
         function onFileChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onLoaded() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
-    property Connections hyprlandConfigConnections: Connections {
-        target: Config.hyprland
-        function onLayoutChanged() {
-            GlobalStates.setHyprlandLayout(Config.hyprland.layout);
-        }
+    property Connections compositorConfigConnections: Connections {
+        target: Config.compositor
+
         function onBorderSizeChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onRoundingChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onGapsInChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onGapsOutChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onActiveBorderColorChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onInactiveBorderColorChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBorderAngleChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onInactiveBorderAngleChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onSyncRoundnessChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onSyncBorderWidthChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onSyncBorderColorChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onSyncShadowOpacityChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onSyncShadowColorChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowEnabledChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowRangeChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowRenderPowerChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowSharpChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowIgnoreWindowChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowColorChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowColorInactiveChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowOpacityChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowOffsetChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onShadowScaleChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurEnabledChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurSizeChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurPassesChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurIgnoreOpacityChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurExplicitIgnoreAlphaChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurIgnoreAlphaValueChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurNewOptimizationsChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurXrayChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurNoiseChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurContrastChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurBrightnessChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurVibrancyChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurVibrancyDarknessChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurSpecialChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurPopupsChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurPopupsIgnorealphaChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurInputMethodsChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onBlurInputMethodsIgnorealphaChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
     property Connections colorsConnections: Connections {
         target: Colors
         function onFileChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         function onLoaded() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
     property Connections barConnections: Connections {
         target: Config.bar
         function onPositionChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
     property Connections srBgConnections: Connections {
         target: Config.theme.srBg
         function onOpacityChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
     property Connections srBarBgConnections: Connections {
         target: Config.theme.srBarBg
         function onOpacityChanged() {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
     }
 
     property Connections globalStatesConnections: Connections {
         target: GlobalStates
-        function onHyprlandLayoutChanged() {
-            applyHyprlandConfig();
+        function onCompositorLayoutChanged() {
+            applyCompositorConfig();
         }
-        function onHyprlandLayoutReadyChanged() {
-            if (GlobalStates.hyprlandLayoutReady) {
-                applyHyprlandConfig();
+        function onCompositorLayoutReadyChanged() {
+            if (GlobalStates.compositorLayoutReady) {
+                applyCompositorConfig();
             }
         }
     }
 
-    property Connections hyprlandConnections: Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name === "configreloaded") {
-                console.log("HyprlandConfig: Detectado configreloaded, reaplicando configuración...");
-                applyHyprlandConfig();
-            }
-        }
-    }
 
     Component.onCompleted: {
         // Apply immediately if Config is already loaded.
         if (Config.loader.loaded) {
-            applyHyprlandConfig();
+            applyCompositorConfig();
         }
         // Otherwise, handled by onLoaded.
     }

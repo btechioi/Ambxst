@@ -86,27 +86,12 @@ Item {
             }
         }
 
-        Item {
-            id: iconContainer
+        Text {
             anchors.centerIn: parent
-            width: 18
-            height: 18
-
-            Text {
-                id: layoutIcon
-                anchors.fill: parent
-                text: root.getLayoutIcon(GlobalStates.hyprlandLayout)
-                font.family: Icons.font
-                font.pixelSize: 18
-                color: root.popupOpen ? buttonBg.item : Styling.srItem("overprimary")
-            }
-
-            Tinted {
-                anchors.fill: parent
-                sourceItem: layoutIcon
-                active: Config.tintIcons
-                fullTint: false
-            }
+            text: root.getLayoutIcon(GlobalStates.compositorLayout)
+            font.family: Icons.font
+            font.pixelSize: 18
+            color: root.popupOpen ? buttonBg.item : Styling.srItem("overprimary")
         }
 
         MouseArea {
@@ -118,7 +103,7 @@ Item {
 
         StyledToolTip {
             visible: root.isHovered && !root.popupOpen
-            tooltipText: "Layout: " + root.getLayoutDisplayName(GlobalStates.hyprlandLayout)
+            tooltipText: "Layout: " + root.getLayoutDisplayName(GlobalStates.compositorLayout)
         }
     }
 
@@ -138,7 +123,7 @@ Item {
 
             readonly property int currentIndex: {
                 for (let i = 0; i < GlobalStates.availableLayouts.length; i++) {
-                    if (GlobalStates.availableLayouts[i] === GlobalStates.hyprlandLayout) {
+                    if (GlobalStates.availableLayouts[i] === GlobalStates.compositorLayout) {
                         return i;
                     }
                 }
@@ -175,25 +160,11 @@ Item {
                         anchors.centerIn: parent
                         spacing: 8
 
-                        Item {
-                            width: 14
-                            height: 14
-
-                            Text {
-                                id: layoutIcon
-                                anchors.fill: parent
-                                text: root.getLayoutIcon(layoutButton.modelData)
-                                font.family: Icons.font
-                                font.pixelSize: 14
-                                color: layoutButton.item
-                            }
-
-                            Tinted {
-                                anchors.fill: parent
-                                sourceItem: layoutIcon
-                                active: Config.tintIcons
-                                fullTint: false
-                            }
+                        Text {
+                            text: root.getLayoutIcon(layoutButton.modelData)
+                            font.family: Icons.font
+                            font.pixelSize: 14
+                            color: layoutButton.item
                         }
 
                         Text {
@@ -215,7 +186,7 @@ Item {
                         onExited: layoutButton.buttonHovered = false
 
                         onClicked: {
-                            GlobalStates.setHyprlandLayout(layoutButton.modelData);
+                            GlobalStates.setCompositorLayout(layoutButton.modelData);
                         }
                     }
                 }

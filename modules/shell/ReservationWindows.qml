@@ -24,9 +24,14 @@ Item {
     property bool frameEnabled: false
     property int frameThickness: 6
 
-    readonly property int actualFrameSize: frameEnabled ? frameThickness : 0
+    property bool sidebarEnabled: false
+    property bool sidebarPinned: false
+    property int sidebarWidth: 0
+    property string sidebarPosition: "right"
 
-    // No scale factor needed - Qt handles scaling automatically for both rendering and exclusive zones
+    readonly property int sidebarMargin: 4
+
+    readonly property int actualFrameSize: frameEnabled ? frameThickness : 0
 
     Item {
         id: noInputRegion
@@ -49,7 +54,7 @@ Item {
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         WlrLayershell.namespace: "ambxst:reservation:top"
-
+        
         exclusiveZone: {
             if (!Config.barReady) return 0;
             let zone = actualFrameSize;
@@ -121,6 +126,10 @@ Item {
                 zone += barSize + barOuterMargin;
                 if (containBar && frameEnabled) zone += actualFrameSize;
             }
+            if (sidebarEnabled && sidebarPosition === "left" && sidebarPinned) {
+                zone += sidebarWidth;
+                zone += frameEnabled ? actualFrameSize : sidebarMargin;
+            }
             if (dockEnabled && dockPosition === "left" && dockPinned) zone += dockHeight;
             return zone;
         }
@@ -152,6 +161,10 @@ Item {
             if (barEnabled && barPosition === "right" && barPinned) {
                 zone += barSize + barOuterMargin;
                 if (containBar && frameEnabled) zone += actualFrameSize;
+            }
+            if (sidebarEnabled && sidebarPosition === "right" && sidebarPinned) {
+                zone += sidebarWidth;
+                zone += frameEnabled ? actualFrameSize : sidebarMargin;
             }
             if (dockEnabled && dockPosition === "right" && dockPinned) zone += dockHeight;
             return zone;

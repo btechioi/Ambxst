@@ -11,7 +11,8 @@ import "defaults/bar.js" as BarDefaults
 import "defaults/workspaces.js" as WorkspacesDefaults
 import "defaults/overview.js" as OverviewDefaults
 import "defaults/notch.js" as NotchDefaults
-import "defaults/hyprland.js" as HyprlandDefaults
+import "defaults/compositor.js" as CompositorDefaults
+import "KeybindActions.js" as KeybindActions
 import "defaults/performance.js" as PerformanceDefaults
 import "defaults/weather.js" as WeatherDefaults
 import "defaults/desktop.js" as DesktopDefaults
@@ -35,6 +36,7 @@ Singleton {
 
     property string configDir: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/ambxst/config"
     property string keybindsPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/ambxst/binds.json"
+    property string presetDir: Qt.resolvedUrl("../assets/presets/Ambxst Default").toString().replace("file://", "")
 
     property bool pauseAutoSave: false
 
@@ -44,7 +46,7 @@ Singleton {
     property bool workspacesReady: false
     property bool overviewReady: false
     property bool notchReady: false
-    property bool hyprlandReady: false
+    property bool compositorReady: false
     property bool performanceReady: false
     property bool weatherReady: false
     property bool desktopReady: false
@@ -55,7 +57,7 @@ Singleton {
     property bool aiReady: false
     property bool keybindsInitialLoadComplete: false
 
-    property bool initialLoadComplete: themeReady && barReady && workspacesReady && overviewReady && notchReady && hyprlandReady && performanceReady && weatherReady && desktopReady && lockscreenReady && prefixReady && systemReady && dockReady && aiReady
+    property bool initialLoadComplete: themeReady && barReady && workspacesReady && overviewReady && notchReady && compositorReady && performanceReady && weatherReady && desktopReady && lockscreenReady && prefixReady && systemReady && dockReady && aiReady
 
     // Compatibility aliases
     property alias loader: themeLoader
@@ -64,11 +66,34 @@ Singleton {
     // ============================================
     // BATCH INITIALIZATION
     // ============================================
-    // Ensure config directory exists (pure mkdir, no file checks)
+    // Ensure config directory exists and copy preset files if missing
     Process {
         id: ensureConfigDir
         running: true
-        command: ["mkdir", "-p", root.configDir]
+        command: [
+            "bash", "-c",
+            "mkdir -p '" + root.configDir + "' && " +
+            "cp -n '" + root.presetDir + "/theme.json' '" + root.configDir + "/theme.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/bar.json' '" + root.configDir + "/bar.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/workspaces.json' '" + root.configDir + "/workspaces.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/overview.json' '" + root.configDir + "/overview.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/notch.json' '" + root.configDir + "/notch.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/compositor.json' '" + root.configDir + "/compositor.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/performance.json' '" + root.configDir + "/performance.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/desktop.json' '" + root.configDir + "/desktop.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/lockscreen.json' '" + root.configDir + "/lockscreen.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/dock.json' '" + root.configDir + "/dock.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/ai.json' '" + root.configDir + "/ai.json' 2>/dev/null || true; " +
+            "cp -n '" + root.presetDir + "/system.json' '" + root.configDir + "/system.json' 2>/dev/null || true; " +
+            "echo 'Preset files copied if missing'"
+        ]
+    }
+
+    // Auto-migrate hyprland.json → compositor.json for existing users
+    Process {
+        id: migrateCompositorConfig
+        running: true
+        command: ["bash", "-c", `test -f '${root.configDir}/hyprland.json' && ! test -f '${root.configDir}/compositor.json' && mv '${root.configDir}/hyprland.json' '${root.configDir}/compositor.json' && echo 'Migrated hyprland.json to compositor.json' || true`]
     }
 
     // ============================================
@@ -82,6 +107,13 @@ Singleton {
         onLoaded: {
             if (!root.themeReady) {
                 validateModule("theme", themeLoader, ThemeDefaults.data, () => {
+                    root.themeReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.themeReady) {
+                handleMissingConfig("theme", themeLoader, ThemeDefaults.data, () => {
                     root.themeReady = true;
                 });
             }
@@ -474,6 +506,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.barReady) {
+                handleMissingConfig("bar", barLoader, BarDefaults.data, () => {
+                    root.barReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -526,6 +565,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.workspacesReady) {
+                handleMissingConfig("workspaces", workspacesLoader, WorkspacesDefaults.data, () => {
+                    root.workspacesReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -558,6 +604,13 @@ Singleton {
         onLoaded: {
             if (!root.overviewReady) {
                 validateModule("overview", overviewLoader, OverviewDefaults.data, () => {
+                    root.overviewReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.overviewReady) {
+                handleMissingConfig("overview", overviewLoader, OverviewDefaults.data, () => {
                     root.overviewReady = true;
                 });
             }
@@ -597,6 +650,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.notchReady) {
+                handleMissingConfig("notch", notchLoader, NotchDefaults.data, () => {
+                    root.notchReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -621,17 +681,24 @@ Singleton {
     }
 
     // ============================================
-    // HYPRLAND MODULE
+    // COMPOSITOR MODULE
     // ============================================
     FileView {
-        id: hyprlandLoader
-        path: root.configDir + "/hyprland.json"
+        id: compositorLoader
+        path: root.configDir + "/compositor.json"
         atomicWrites: true
         watchChanges: true
         onLoaded: {
-            if (!root.hyprlandReady) {
-                validateModule("hyprland", hyprlandLoader, HyprlandDefaults.data, () => {
-                    root.hyprlandReady = true;
+            if (!root.compositorReady) {
+                validateModule("compositor", compositorLoader, CompositorDefaults.data, () => {
+                    root.compositorReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.compositorReady) {
+                handleMissingConfig("compositor", compositorLoader, CompositorDefaults.data, () => {
+                    root.compositorReady = true;
                 });
             }
         }
@@ -642,8 +709,8 @@ Singleton {
         }
         onPathChanged: reload()
         onAdapterUpdated: {
-            if (root.hyprlandReady && !root.pauseAutoSave) {
-                hyprlandLoader.writeAdapter();
+            if (root.compositorReady && !root.pauseAutoSave) {
+                compositorLoader.writeAdapter();
             }
         }
 
@@ -708,6 +775,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.performanceReady) {
+                handleMissingConfig("performance", performanceLoader, PerformanceDefaults.data, () => {
+                    root.performanceReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -745,6 +819,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.weatherReady) {
+                handleMissingConfig("weather", weatherLoader, WeatherDefaults.data, () => {
+                    root.weatherReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -774,6 +855,13 @@ Singleton {
         onLoaded: {
             if (!root.desktopReady) {
                 validateModule("desktop", desktopLoader, DesktopDefaults.data, () => {
+                    root.desktopReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.desktopReady) {
+                handleMissingConfig("desktop", desktopLoader, DesktopDefaults.data, () => {
                     root.desktopReady = true;
                 });
             }
@@ -813,6 +901,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.lockscreenReady) {
+                handleMissingConfig("lockscreen", lockscreenLoader, LockscreenDefaults.data, () => {
+                    root.lockscreenReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -841,6 +936,13 @@ Singleton {
         onLoaded: {
             if (!root.prefixReady) {
                 validateModule("prefix", prefixLoader, PrefixDefaults.data, () => {
+                    root.prefixReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.prefixReady) {
+                handleMissingConfig("prefix", prefixLoader, PrefixDefaults.data, () => {
                     root.prefixReady = true;
                 });
             }
@@ -877,6 +979,13 @@ Singleton {
         onLoaded: {
             if (!root.systemReady) {
                 validateModule("system", systemLoader, SystemDefaults.data, () => {
+                    root.systemReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.systemReady) {
+                handleMissingConfig("system", systemLoader, SystemDefaults.data, () => {
                     root.systemReady = true;
                 });
             }
@@ -952,6 +1061,13 @@ Singleton {
         onLoaded: {
             if (!root.dockReady) {
                 validateModule("dock", dockLoader, DockDefaults.data, () => {
+                    root.dockReady = true;
+                });
+            }
+        }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.dockReady) {
+                handleMissingConfig("dock", dockLoader, DockDefaults.data, () => {
                     root.dockReady = true;
                 });
             }
@@ -1039,6 +1155,13 @@ Singleton {
                 });
             }
         }
+        onLoadFailed: {
+            if (error.toString().includes("FileNotFound") && !root.aiReady) {
+                handleMissingConfig("ai", aiLoader, AiDefaults.data, () => {
+                    root.aiReady = true;
+                });
+            }
+        }
         onFileChanged: {
             root.pauseAutoSave = true;
             reload();
@@ -1055,7 +1178,10 @@ Singleton {
             property string systemPrompt: "You are a helpful assistant running on a Linux system. You have access to some tools to control the system."
             property string tool: "none"
             property list<var> extraModels: []
-            property string defaultModel: "gemini-pro"
+            property string defaultModel: "gemini-2.0-flash"
+            property int sidebarWidth: 400
+            property string sidebarPosition: "right"
+            property bool sidebarPinnedOnStartup: false
         }
     }
 
@@ -1070,6 +1196,21 @@ Singleton {
         }
     }
 
+
+    // Timer to create binds.json if missing after initial load
+    Timer {
+        id: createKeybindsTimer
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            const raw = keybindsLoader.text();
+            if (!raw || raw.trim().length === 0) {
+                console.log("binds.json still missing after delay, creating...");
+                keybindsLoader.writeAdapter();
+                repairKeybindsTimer.start();
+            }
+        }
+    }
     // Repair missing binds
     function repairKeybinds() {
         const raw = keybindsLoader.text();
@@ -1094,34 +1235,42 @@ Singleton {
                 if (nested.widgets) {
                     current.ambxst.launcher = nested.widgets;
                     current.ambxst.launcher.argument = "ambxst run launcher";
+                    current.ambxst.launcher.action = createAction(current.ambxst.launcher);
                 }
                 if (nested.dashboard) {
                     current.ambxst.dashboard = nested.dashboard;
                     current.ambxst.dashboard.argument = "ambxst run dashboard";
+                    current.ambxst.dashboard.action = createAction(current.ambxst.dashboard);
                 }
                 if (nested.assistant) {
                     current.ambxst.assistant = nested.assistant;
                     current.ambxst.assistant.argument = "ambxst run assistant";
+                    current.ambxst.assistant.action = createAction(current.ambxst.assistant);
                 }
                 if (nested.clipboard) {
                     current.ambxst.clipboard = nested.clipboard;
                     current.ambxst.clipboard.argument = "ambxst run clipboard";
+                    current.ambxst.clipboard.action = createAction(current.ambxst.clipboard);
                 }
                 if (nested.emoji) {
                     current.ambxst.emoji = nested.emoji;
                     current.ambxst.emoji.argument = "ambxst run emoji";
+                    current.ambxst.emoji.action = createAction(current.ambxst.emoji);
                 }
                 if (nested.notes) {
                     current.ambxst.notes = nested.notes;
                     current.ambxst.notes.argument = "ambxst run notes";
+                    current.ambxst.notes.action = createAction(current.ambxst.notes);
                 }
                 if (nested.tmux) {
                     current.ambxst.tmux = nested.tmux;
                     current.ambxst.tmux.argument = "ambxst run tmux";
+                    current.ambxst.tmux.action = createAction(current.ambxst.tmux);
                 }
                 if (nested.wallpapers) {
                     current.ambxst.wallpapers = nested.wallpapers;
                     current.ambxst.wallpapers.argument = "ambxst run wallpapers";
+                    current.ambxst.wallpapers.action = createAction(current.ambxst.wallpapers);
                 }
 
                 // Remove the old nested object
@@ -1139,13 +1288,18 @@ Singleton {
             if (!adapter || !adapter.ambxst) return;
 
             // Helper function to create clean bind object
+            function createAction(bindObj) {
+                if (bindObj && bindObj.action) {
+                    return KeybindActions.ensureAction(bindObj.action);
+                }
+                return KeybindActions.actionFromLegacy(bindObj.dispatcher || "", bindObj.argument || "", bindObj.flags || "");
+            }
+
             function createCleanBind(bindObj) {
                 return {
                     "modifiers": bindObj.modifiers || [],
                     "key": bindObj.key || "",
-                    "dispatcher": bindObj.dispatcher || "",
-                    "argument": bindObj.argument || "",
-                    "flags": bindObj.flags || ""
+                    "action": createAction(bindObj)
                 };
             }
 
@@ -1155,6 +1309,12 @@ Singleton {
                 if (!current.ambxst[key] && adapter.ambxst[key]) {
                     console.log("Adding missing ambxst bind:", key);
                     current.ambxst[key] = createCleanBind(adapter.ambxst[key]);
+                    needsUpdate = true;
+                } else if (current.ambxst[key] && !current.ambxst[key].action) {
+                    current.ambxst[key].action = createAction(current.ambxst[key]);
+                    delete current.ambxst[key].dispatcher;
+                    delete current.ambxst[key].argument;
+                    delete current.ambxst[key].flags;
                     needsUpdate = true;
                 }
             }
@@ -1166,12 +1326,26 @@ Singleton {
                     console.log("Adding missing system bind:", key);
                     current.ambxst.system[key] = createCleanBind(adapter.ambxst.system[key]);
                     needsUpdate = true;
+                } else if (current.ambxst.system[key] && !current.ambxst.system[key].action) {
+                    current.ambxst.system[key].action = createAction(current.ambxst.system[key]);
+                    delete current.ambxst.system[key].dispatcher;
+                    delete current.ambxst.system[key].argument;
+                    delete current.ambxst.system[key].flags;
+                    needsUpdate = true;
+                }
+            }
+
+            if (current.custom && current.custom.length > 0) {
+                const normalized = KeybindActions.normalizeCustomBinds(current.custom);
+                if (normalized.changed) {
+                    current.custom = normalized.binds;
+                    needsUpdate = true;
                 }
             }
 
             if (needsUpdate) {
                 console.log("Auto-repairing binds.json: adding missing binds");
-                keybindsLoader.setText(JSON.stringify(current, null, 4));
+                keybindsLoader.setText(JSON.stringify(current, null, 2));
             }
         } catch (e) {
             console.warn("Failed to repair binds.json:", e);
@@ -1183,17 +1357,23 @@ Singleton {
         path: keybindsPath
         atomicWrites: true
         watchChanges: true
+        Component.onCompleted: {
+            // Ensure binds.json is created even if onLoaded never fires
+            createKeybindsTimer.start();
+        }
         onLoaded: {
             if (!root.keybindsInitialLoadComplete) {
                 var raw = text();
                 if (!raw || raw.trim().length === 0) {
                     console.log("binds.json not found, creating with default values...");
                     keybindsLoader.writeAdapter();
+                    repairKeybindsTimer.start();
                 } else {
                     // File exists, check if it needs repair
                     repairKeybindsTimer.start();
                 }
                 root.keybindsInitialLoadComplete = true;
+                createKeybindsTimer.start();
             }
         }
         onFileChanged: {
@@ -1217,76 +1397,10 @@ Singleton {
             if (!adapter || !adapter.custom)
                 return;
 
-            let needsUpdate = false;
-            let normalizedBinds = [];
-
-            for (let i = 0; i < adapter.custom.length; i++) {
-                let bind = adapter.custom[i];
-
-                // Check if it's old format (has modifiers/key instead of keys[])
-                if (bind.keys === undefined || bind.actions === undefined) {
-                    needsUpdate = true;
-                    normalizedBinds.push({
-                        "name": bind.name || "",
-                        "keys": [
-                            {
-                                "modifiers": bind.modifiers || [],
-                                "key": bind.key || ""
-                            }
-                        ],
-                        "actions": [
-                            {
-                                "dispatcher": bind.dispatcher || "",
-                                "argument": bind.argument || "",
-                                "flags": bind.flags || "",
-                                "compositor": {
-                                    "type": "hyprland",
-                                    "layouts": []
-                                }
-                            }
-                        ],
-                        "enabled": bind.enabled !== false
-                    });
-                } else {
-                    // Check if actions need compositor field added
-                    let actionsNeedUpdate = false;
-                    let normalizedActions = [];
-
-                    for (let a = 0; a < bind.actions.length; a++) {
-                        let action = bind.actions[a];
-                        if (action.compositor === undefined) {
-                            actionsNeedUpdate = true;
-                            normalizedActions.push({
-                                "dispatcher": action.dispatcher || "",
-                                "argument": action.argument || "",
-                                "flags": action.flags || "",
-                                "compositor": {
-                                    "type": "hyprland",
-                                    "layouts": []
-                                }
-                            });
-                        } else {
-                            normalizedActions.push(action);
-                        }
-                    }
-
-                    if (actionsNeedUpdate) {
-                        needsUpdate = true;
-                        normalizedBinds.push({
-                            "name": bind.name || "",
-                            "keys": bind.keys,
-                            "actions": normalizedActions,
-                            "enabled": bind.enabled !== false
-                        });
-                    } else {
-                        normalizedBinds.push(bind);
-                    }
-                }
-            }
-
-            if (needsUpdate) {
-                console.log("Normalizing custom binds: migrating to new keys/actions/compositor format");
-                adapter.custom = normalizedBinds;
+            const normalized = KeybindActions.normalizeCustomBinds(adapter.custom);
+            if (normalized.changed) {
+                console.log("Normalizing custom binds: migrating to action format");
+                adapter.custom = normalized.binds;
             }
         }
 
@@ -1295,149 +1409,119 @@ Singleton {
                 property JsonObject launcher: JsonObject {
                     property list<string> modifiers: ["SUPER"]
                     property string key: "Super_L"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run launcher"
-                    property string flags: "r"
+                property var action: ({ "id": "ambxst.launcher", "args": {} })
+            }
+            property JsonObject dashboard: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "D"
+                property var action: ({ "id": "ambxst.dashboard", "args": {} })
+            }
+            property JsonObject assistant: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "A"
+                property var action: ({ "id": "ambxst.assistant", "args": {} })
+            }
+            property JsonObject clipboard: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "V"
+                property var action: ({ "id": "ambxst.clipboard", "args": {} })
+            }
+            property JsonObject emoji: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "PERIOD"
+                property var action: ({ "id": "ambxst.emoji", "args": {} })
+            }
+            property JsonObject notes: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "N"
+                property var action: ({ "id": "ambxst.notes", "args": {} })
+            }
+            property JsonObject tmux: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "T"
+                property var action: ({ "id": "ambxst.tmux", "args": {} })
+            }
+            property JsonObject wallpapers: JsonObject {
+                property list<string> modifiers: ["SUPER"]
+                property string key: "COMMA"
+                property var action: ({ "id": "ambxst.wallpapers", "args": {} })
+            }
+            property JsonObject system: JsonObject {
+                property JsonObject config: JsonObject {
+                    property list<string> modifiers: ["SUPER", "SHIFT"]
+                    property string key: "C"
+                    property var action: ({ "id": "ambxst.config", "args": {} })
                 }
-                property JsonObject dashboard: JsonObject {
+                property JsonObject lockscreen: JsonObject {
                     property list<string> modifiers: ["SUPER"]
-                    property string key: "D"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run dashboard"
-                    property string flags: ""
+                    property string key: "L"
+                    property var action: ({ "id": "system.lock", "args": {} })
                 }
-                property JsonObject assistant: JsonObject {
+                property JsonObject overview: JsonObject {
                     property list<string> modifiers: ["SUPER"]
+                    property string key: "TAB"
+                    property var action: ({ "id": "ambxst.overview", "args": {} })
+                }
+                property JsonObject powermenu: JsonObject {
+                    property list<string> modifiers: ["SUPER"]
+                    property string key: "ESCAPE"
+                    property var action: ({ "id": "ambxst.powermenu", "args": {} })
+                }
+                property JsonObject tools: JsonObject {
+                    property list<string> modifiers: ["SUPER"]
+                    property string key: "S"
+                    property var action: ({ "id": "ambxst.tools", "args": {} })
+                }
+                property JsonObject screenshot: JsonObject {
+                    property list<string> modifiers: ["SUPER", "SHIFT"]
+                    property string key: "S"
+                    property var action: ({ "id": "ambxst.screenshot", "args": {} })
+                }
+                property JsonObject screenrecord: JsonObject {
+                    property list<string> modifiers: ["SUPER", "SHIFT"]
+                    property string key: "R"
+                    property var action: ({ "id": "ambxst.screenrecord", "args": {} })
+                }
+                property JsonObject lens: JsonObject {
+                    property list<string> modifiers: ["SUPER", "SHIFT"]
                     property string key: "A"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run assistant"
+                    property var action: ({ "id": "ambxst.lens", "args": {} })
                 }
-                property JsonObject clipboard: JsonObject {
-                    property list<string> modifiers: ["SUPER"]
-                    property string key: "V"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run clipboard"
+                property JsonObject reload: JsonObject {
+                    property list<string> modifiers: ["SUPER", "ALT"]
+                    property string key: "B"
+                    property var action: ({ "id": "ambxst.reload", "args": {} })
                 }
-                property JsonObject emoji: JsonObject {
-                    property list<string> modifiers: ["SUPER"]
-                    property string key: "PERIOD"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run emoji"
+                property JsonObject quit: JsonObject {
+                    property list<string> modifiers: ["SUPER", "CTRL", "ALT"]
+                    property string key: "B"
+                    property var action: ({ "id": "ambxst.quit", "args": {} })
                 }
-                property JsonObject notes: JsonObject {
-                    property list<string> modifiers: ["SUPER"]
-                    property string key: "N"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run notes"
-                }
-                property JsonObject tmux: JsonObject {
-                    property list<string> modifiers: ["SUPER"]
-                    property string key: "T"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run tmux"
-                }
-                property JsonObject wallpapers: JsonObject {
-                    property list<string> modifiers: ["SUPER"]
-                    property string key: "COMMA"
-                    property string dispatcher: "exec"
-                    property string argument: "ambxst run wallpapers"
-                }
-                property JsonObject system: JsonObject {
-                    property JsonObject config: JsonObject {
-                        property list<string> modifiers: ["SUPER", "SHIFT"]
-                        property string key: "C"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run config"
-                        property string flags: ""
-                    }
-                    property JsonObject lockscreen: JsonObject {
-                        property list<string> modifiers: ["SUPER"]
-                        property string key: "L"
-                        property string dispatcher: "exec"
-                        property string argument: "loginctl lock-session"
-                        property string flags: ""
-                    }
-                    property JsonObject overview: JsonObject {
-                        property list<string> modifiers: ["SUPER"]
-                        property string key: "TAB"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run overview"
-                        property string flags: ""
-                    }
-                    property JsonObject powermenu: JsonObject {
-                        property list<string> modifiers: ["SUPER"]
-                        property string key: "ESCAPE"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run powermenu"
-                        property string flags: ""
-                    }
-                    property JsonObject tools: JsonObject {
-                        property list<string> modifiers: ["SUPER"]
-                        property string key: "S"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run tools"
-                        property string flags: ""
-                    }
-                    property JsonObject screenshot: JsonObject {
-                        property list<string> modifiers: ["SUPER", "SHIFT"]
-                        property string key: "S"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run screenshot"
-                        property string flags: ""
-                    }
-                    property JsonObject screenrecord: JsonObject {
-                        property list<string> modifiers: ["SUPER", "SHIFT"]
-                        property string key: "R"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run screenrecord"
-                        property string flags: ""
-                    }
-                    property JsonObject lens: JsonObject {
-                        property list<string> modifiers: ["SUPER", "SHIFT"]
-                        property string key: "A"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst run lens"
-                        property string flags: ""
-                    }
-                    property JsonObject reload: JsonObject {
-                        property list<string> modifiers: ["SUPER", "ALT"]
-                        property string key: "B"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst reload"
-                        property string flags: ""
-                    }
-                    property JsonObject quit: JsonObject {
-                        property list<string> modifiers: ["SUPER", "CTRL", "ALT"]
-                        property string key: "B"
-                        property string dispatcher: "exec"
-                        property string argument: "ambxst quit"
-                        property string flags: ""
-                    }
-                }
+            }
             }
             // Default getters
             readonly property var defaultAmbxstBinds: {
                 "ambxst": {
-                    "launcher": { "modifiers": ["SUPER"], "key": "Super_L", "dispatcher": "exec", "argument": "ambxst run launcher", "flags": "r" },
-                    "dashboard": { "modifiers": ["SUPER"], "key": "D", "dispatcher": "exec", "argument": "ambxst run dashboard", "flags": "" },
-                    "assistant": { "modifiers": ["SUPER"], "key": "A", "dispatcher": "exec", "argument": "ambxst run assistant", "flags": "" },
-                    "clipboard": { "modifiers": ["SUPER"], "key": "V", "dispatcher": "exec", "argument": "ambxst run clipboard", "flags": "" },
-                    "emoji": { "modifiers": ["SUPER"], "key": "PERIOD", "dispatcher": "exec", "argument": "ambxst run emoji", "flags": "" },
-                    "notes": { "modifiers": ["SUPER"], "key": "N", "dispatcher": "exec", "argument": "ambxst run notes", "flags": "" },
-                    "tmux": { "modifiers": ["SUPER"], "key": "T", "dispatcher": "exec", "argument": "ambxst run tmux", "flags": "" },
-                    "wallpapers": { "modifiers": ["SUPER"], "key": "COMMA", "dispatcher": "exec", "argument": "ambxst run wallpapers", "flags": "" }
+                    "launcher": { "modifiers": ["SUPER"], "key": "Super_L", "action": { "id": "ambxst.launcher", "args": {} } },
+                    "dashboard": { "modifiers": ["SUPER"], "key": "D", "action": { "id": "ambxst.dashboard", "args": {} } },
+                    "assistant": { "modifiers": ["SUPER"], "key": "A", "action": { "id": "ambxst.assistant", "args": {} } },
+                    "clipboard": { "modifiers": ["SUPER"], "key": "V", "action": { "id": "ambxst.clipboard", "args": {} } },
+                    "emoji": { "modifiers": ["SUPER"], "key": "PERIOD", "action": { "id": "ambxst.emoji", "args": {} } },
+                    "notes": { "modifiers": ["SUPER"], "key": "N", "action": { "id": "ambxst.notes", "args": {} } },
+                    "tmux": { "modifiers": ["SUPER"], "key": "T", "action": { "id": "ambxst.tmux", "args": {} } },
+                    "wallpapers": { "modifiers": ["SUPER"], "key": "COMMA", "action": { "id": "ambxst.wallpapers", "args": {} } }
                 },
                 "system": {
-                    "config": { "modifiers": ["SUPER", "SHIFT"], "key": "C", "dispatcher": "exec", "argument": "ambxst run config", "flags": "" },
-                    "lockscreen": { "modifiers": ["SUPER"], "key": "L", "dispatcher": "exec", "argument": "loginctl lock-session", "flags": "" },
-                    "overview": { "modifiers": ["SUPER"], "key": "TAB", "dispatcher": "exec", "argument": "ambxst run overview", "flags": "" },
-                    "powermenu": { "modifiers": ["SUPER"], "key": "ESCAPE", "dispatcher": "exec", "argument": "ambxst run powermenu", "flags": "" },
-                    "tools": { "modifiers": ["SUPER"], "key": "S", "dispatcher": "exec", "argument": "ambxst run tools", "flags": "" },
-                    "screenshot": { "modifiers": ["SUPER", "SHIFT"], "key": "S", "dispatcher": "exec", "argument": "ambxst run screenshot", "flags": "" },
-                    "screenrecord": { "modifiers": ["SUPER", "SHIFT"], "key": "R", "dispatcher": "exec", "argument": "ambxst run screenrecord", "flags": "" },
-                    "lens": { "modifiers": ["SUPER", "SHIFT"], "key": "A", "dispatcher": "exec", "argument": "ambxst run lens", "flags": "" },
-                    "reload": { "modifiers": ["SUPER", "ALT"], "key": "B", "dispatcher": "exec", "argument": "ambxst reload", "flags": "" },
-                    "quit": { "modifiers": ["SUPER", "CTRL", "ALT"], "key": "B", "dispatcher": "exec", "argument": "ambxst quit", "flags": "" }
+                    "config": { "modifiers": ["SUPER", "SHIFT"], "key": "C", "action": { "id": "ambxst.config", "args": {} } },
+                    "lockscreen": { "modifiers": ["SUPER"], "key": "L", "action": { "id": "system.lock", "args": {} } },
+                    "overview": { "modifiers": ["SUPER"], "key": "TAB", "action": { "id": "ambxst.overview", "args": {} } },
+                    "powermenu": { "modifiers": ["SUPER"], "key": "ESCAPE", "action": { "id": "ambxst.powermenu", "args": {} } },
+                    "tools": { "modifiers": ["SUPER"], "key": "S", "action": { "id": "ambxst.tools", "args": {} } },
+                    "screenshot": { "modifiers": ["SUPER", "SHIFT"], "key": "S", "action": { "id": "ambxst.screenshot", "args": {} } },
+                    "screenrecord": { "modifiers": ["SUPER", "SHIFT"], "key": "R", "action": { "id": "ambxst.screenrecord", "args": {} } },
+                    "lens": { "modifiers": ["SUPER", "SHIFT"], "key": "A", "action": { "id": "ambxst.lens", "args": {} } },
+                    "reload": { "modifiers": ["SUPER", "ALT"], "key": "B", "action": { "id": "ambxst.reload", "args": {} } },
+                    "quit": { "modifiers": ["SUPER", "CTRL", "ALT"], "key": "B", "action": { "id": "ambxst.quit", "args": {} } }
                 }
             }
 
@@ -1447,16 +1531,13 @@ Singleton {
                     return {
                         "modifiers": bind.modifiers || [],
                         "key": bind.key || "",
-                        "dispatcher": bind.dispatcher || "",
-                        "argument": bind.argument || "",
-                        "flags": bind.flags || ""
+                        "action": KeybindActions.ensureAction(bind.action)
                     };
                 }
                 return null;
             }
 
             property list<var> custom: [
-                // Window management
                 {
                     "name": "Close Window",
                     "keys": [
@@ -1470,16 +1551,11 @@ Singleton {
                             "dispatcher": "killactive",
                             "argument": "",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Workspace navigation
                 {
                     "name": "Workspace 1",
                     "keys": [
@@ -1493,10 +1569,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1514,10 +1587,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "2",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1535,10 +1605,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "3",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1556,10 +1623,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "4",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1577,10 +1641,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "5",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1598,10 +1659,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "6",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1619,10 +1677,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "7",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1640,10 +1695,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "8",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1661,10 +1713,7 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "9",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -1682,18 +1731,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "10",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Move window to workspace
                 {
-                    "name": "Move to Workspace 1",
+                    "name": "Move Window to Workspace 1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1705,16 +1749,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 2",
+                    "name": "Move Window to Workspace 2",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1726,16 +1767,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "2",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 3",
+                    "name": "Move Window to Workspace 3",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1747,16 +1785,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "3",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 4",
+                    "name": "Move Window to Workspace 4",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1768,16 +1803,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "4",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 5",
+                    "name": "Move Window to Workspace 5",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1789,16 +1821,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "5",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 6",
+                    "name": "Move Window to Workspace 6",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1810,16 +1839,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "6",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 7",
+                    "name": "Move Window to Workspace 7",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1831,16 +1857,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "7",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 8",
+                    "name": "Move Window to Workspace 8",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1852,16 +1875,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "8",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 9",
+                    "name": "Move Window to Workspace 9",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1873,16 +1893,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "9",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Workspace 10",
+                    "name": "Move Window to Workspace 10",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1894,18 +1911,193 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "10",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Workspace scroll/keys
                 {
-                    "name": "Previous Occupied Workspace (Scroll)",
+                    "name": "Move Window Silently to Workspace 1",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "1"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "1",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 2",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "2"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "2",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 3",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "3"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "3",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 4",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "4"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "4",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 5",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "5"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "5",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 6",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "6"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "6",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 7",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "7"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "7",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 8",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "8"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "8",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 9",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "9"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "9",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Silently to Workspace 10",
+                    "keys": [
+                        {
+                            "modifiers": ["SUPER", "ALT"],
+                            "key": "0"
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movetoworkspacesilent",
+                            "argument": "10",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Switch Occupied Workspace -1",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
@@ -1917,16 +2109,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "e-1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Next Occupied Workspace (Scroll)",
+                    "name": "Switch Occupied Workspace +1",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
@@ -1938,16 +2127,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "e+1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Previous Occupied Workspace",
+                    "name": "Switch Occupied Workspace -1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1959,16 +2145,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "e-1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Next Occupied Workspace",
+                    "name": "Switch Occupied Workspace +1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -1980,16 +2163,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "e+1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Previous Workspace",
+                    "name": "Switch Relative Workspace -1",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
@@ -2001,16 +2181,13 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "-1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Next Workspace",
+                    "name": "Switch Relative Workspace +1",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
@@ -2022,16 +2199,11 @@ Singleton {
                             "dispatcher": "workspace",
                             "argument": "+1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Window drag/resize
                 {
                     "name": "Drag Window",
                     "keys": [
@@ -2045,16 +2217,13 @@ Singleton {
                             "dispatcher": "movewindow",
                             "argument": "",
                             "flags": "m",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Drag Resize Window",
+                    "name": "Resize Window with Mouse",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
@@ -2066,18 +2235,13 @@ Singleton {
                             "dispatcher": "resizewindow",
                             "argument": "",
                             "flags": "m",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Media controls
                 {
-                    "name": "Play/Pause",
+                    "name": "Media Play Pause",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2089,16 +2253,13 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "playerctl play-pause",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Previous Track",
+                    "name": "Media Previous",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2110,16 +2271,13 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "playerctl previous",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Next Track",
+                    "name": "Media Next",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2131,16 +2289,13 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "playerctl next",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Media Play/Pause",
+                    "name": "Media Play Pause",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2152,16 +2307,13 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "playerctl play-pause",
                             "flags": "l",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Stop Playback",
+                    "name": "Media Stop",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2173,16 +2325,11 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "playerctl stop",
                             "flags": "l",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Volume controls
                 {
                     "name": "Volume Up",
                     "keys": [
@@ -2196,10 +2343,7 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 10%+",
                             "flags": "le",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2217,10 +2361,7 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 10%-",
                             "flags": "le",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2238,16 +2379,11 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
                             "flags": "le",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Brightness controls
                 {
                     "name": "Brightness Up",
                     "keys": [
@@ -2261,10 +2397,7 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "ambxst brightness +5",
                             "flags": "le",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2282,16 +2415,11 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "ambxst brightness -5",
                             "flags": "le",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Special keys
                 {
                     "name": "Calculator",
                     "keys": [
@@ -2305,16 +2433,11 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "notify-send \"Soon\"",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Special workspaces
                 {
                     "name": "Toggle Special Workspace",
                     "keys": [
@@ -2328,16 +2451,13 @@ Singleton {
                             "dispatcher": "togglespecialworkspace",
                             "argument": "",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move to Special Workspace",
+                    "name": "Move Window to Special Workspace",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
@@ -2349,18 +2469,13 @@ Singleton {
                             "dispatcher": "movetoworkspace",
                             "argument": "special",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Lid switch events
                 {
-                    "name": "Lock on Lid Close",
+                    "name": "Lock Session on Lid Switch",
                     "keys": [
                         {
                             "modifiers": [],
@@ -2372,10 +2487,7 @@ Singleton {
                             "dispatcher": "exec",
                             "argument": "loginctl lock-session",
                             "flags": "l",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2391,12 +2503,9 @@ Singleton {
                     "actions": [
                         {
                             "dispatcher": "exec",
-                            "argument": "hyprctl dispatch dpms off",
+                            "argument": "axctl monitor set-dpms 0 0",
                             "flags": "l",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2412,25 +2521,34 @@ Singleton {
                     "actions": [
                         {
                             "dispatcher": "exec",
-                            "argument": "hyprctl dispatch dpms on",
+                            "argument": "axctl monitor set-dpms 0 1",
                             "flags": "l",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Window focus
                 {
                     "name": "Focus Up",
                     "keys": [
                         {
                             "modifiers": ["SUPER"],
                             "key": "Up"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "u",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Up",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "k"
@@ -2438,22 +2556,10 @@ Singleton {
                     ],
                     "actions": [
                         {
-                            "dispatcher": "layoutmsg",
-                            "argument": "focus u",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
                             "dispatcher": "movefocus",
                             "argument": "u",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["dwindle", "master"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2464,7 +2570,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER"],
                             "key": "Down"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "d",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Down",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "j"
@@ -2472,22 +2592,10 @@ Singleton {
                     ],
                     "actions": [
                         {
-                            "dispatcher": "layoutmsg",
-                            "argument": "focus d",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
                             "dispatcher": "movefocus",
                             "argument": "d",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2498,11 +2606,39 @@ Singleton {
                         {
                             "modifiers": ["SUPER"],
                             "key": "Left"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "l",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Left",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "z"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "l",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Left",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "h"
@@ -2510,22 +2646,10 @@ Singleton {
                     ],
                     "actions": [
                         {
-                            "dispatcher": "layoutmsg",
-                            "argument": "focus l",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
                             "dispatcher": "movefocus",
                             "argument": "l",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["dwindle", "master"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2536,11 +2660,39 @@ Singleton {
                         {
                             "modifiers": ["SUPER"],
                             "key": "Right"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "r",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Right",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "x"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movefocus",
+                            "argument": "r",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Focus Right",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
                             "key": "l"
@@ -2548,35 +2700,35 @@ Singleton {
                     ],
                     "actions": [
                         {
-                            "dispatcher": "layoutmsg",
-                            "argument": "focus r",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
                             "dispatcher": "movefocus",
                             "argument": "r",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Window movement
                 {
                     "name": "Move Window Left",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "Left"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movewindow",
+                            "argument": "l",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Left",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "h"
@@ -2587,19 +2739,7 @@ Singleton {
                             "dispatcher": "movewindow",
                             "argument": "l",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
-                        },
-                        {
-                            "dispatcher": "layoutmsg",
-                            "argument": "movewindowto l",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2610,7 +2750,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "Right"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movewindow",
+                            "argument": "r",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Right",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "l"
@@ -2621,19 +2775,7 @@ Singleton {
                             "dispatcher": "movewindow",
                             "argument": "r",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["dwindle", "master"]
-                            }
-                        },
-                        {
-                            "dispatcher": "layoutmsg",
-                            "argument": "movewindowto r",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2644,7 +2786,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "Up"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movewindow",
+                            "argument": "u",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Up",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "k"
@@ -2655,19 +2811,7 @@ Singleton {
                             "dispatcher": "movewindow",
                             "argument": "u",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
-                        },
-                        {
-                            "dispatcher": "layoutmsg",
-                            "argument": "movewindowto u",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2678,7 +2822,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "Down"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "movewindow",
+                            "argument": "d",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Move Window Down",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
                             "key": "j"
@@ -2689,32 +2847,32 @@ Singleton {
                             "dispatcher": "movewindow",
                             "argument": "d",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
-                        },
-                        {
-                            "dispatcher": "layoutmsg",
-                            "argument": "movewindowto d",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Window resize
                 {
-                    "name": "Horizontal Resize +",
+                    "name": "Resize Column +0.1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "Right"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "layoutmsg",
+                            "argument": "colresize +0.1",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Resize Column +0.1",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "l"
@@ -2725,30 +2883,32 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "colresize +0.1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
-                            "dispatcher": "resizeactive",
-                            "argument": "50 0",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Horizontal Resize -",
+                    "name": "Resize Column -0.1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "Left"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "layoutmsg",
+                            "argument": "colresize -0.1",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Resize Column -0.1",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "h"
@@ -2759,30 +2919,32 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "colresize -0.1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
-                        },
-                        {
-                            "dispatcher": "resizeactive",
-                            "argument": "-50 0",
-                            "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["master", "dwindle"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Vertical Resize +",
+                    "name": "Resize Active 0 50",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "Down"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "resizeactive",
+                            "argument": "0 50",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Resize Active 0 50",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "j"
@@ -2793,21 +2955,32 @@ Singleton {
                             "dispatcher": "resizeactive",
                             "argument": "0 50",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Vertical Resize -",
+                    "name": "Resize Active 0 -50",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "Up"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "resizeactive",
+                            "argument": "0 -50",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Resize Active 0 -50",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
                             "key": "k"
@@ -2818,18 +2991,13 @@ Singleton {
                             "dispatcher": "resizeactive",
                             "argument": "0 -50",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": []
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Scrolling layout
                 {
-                    "name": "Promote (Scrolling)",
+                    "name": "Promote Column",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "ALT"],
@@ -2841,16 +3009,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "promote",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Toggle Fit (Scrolling)",
+                    "name": "Toggle Fit",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL"],
@@ -2862,16 +3027,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "togglefit",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Toggle Full Column (Scrolling)",
+                    "name": "Resize Column +conf",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "SHIFT"],
@@ -2883,10 +3045,7 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "colresize +conf",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2897,7 +3056,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER", "ALT", "CTRL"],
                             "key": "Left"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "layoutmsg",
+                            "argument": "swapcol l",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Swap Column Left",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT", "CTRL"],
                             "key": "h"
@@ -2908,10 +3081,7 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "swapcol l",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -2922,7 +3092,21 @@ Singleton {
                         {
                             "modifiers": ["SUPER", "ALT", "CTRL"],
                             "key": "Right"
-                        },
+                        }
+                    ],
+                    "actions": [
+                        {
+                            "dispatcher": "layoutmsg",
+                            "argument": "swapcol r",
+                            "flags": "",
+                            "layouts": []
+                        }
+                    ],
+                    "enabled": true
+                },
+                {
+                    "name": "Swap Column Right",
+                    "keys": [
                         {
                             "modifiers": ["SUPER", "ALT", "CTRL"],
                             "key": "l"
@@ -2933,18 +3117,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "swapcol r",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
-
-                // Move column to workspace
                 {
-                    "name": "Move Column To Workspace 1",
+                    "name": "Move Column to Workspace 1",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -2956,16 +3135,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 1",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 2",
+                    "name": "Move Column to Workspace 2",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -2977,16 +3153,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 2",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 3",
+                    "name": "Move Column to Workspace 3",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -2998,16 +3171,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 3",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 4",
+                    "name": "Move Column to Workspace 4",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3019,16 +3189,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 4",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 5",
+                    "name": "Move Column to Workspace 5",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3040,16 +3207,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 5",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 6",
+                    "name": "Move Column to Workspace 6",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3061,16 +3225,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 6",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 7",
+                    "name": "Move Column to Workspace 7",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3082,16 +3243,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 7",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 8",
+                    "name": "Move Column to Workspace 8",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3103,16 +3261,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 8",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 9",
+                    "name": "Move Column to Workspace 9",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3124,16 +3279,13 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 9",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
                 },
                 {
-                    "name": "Move Column To Workspace 10",
+                    "name": "Move Column to Workspace 10",
                     "keys": [
                         {
                             "modifiers": ["SUPER", "CTRL", "ALT"],
@@ -3145,10 +3297,7 @@ Singleton {
                             "dispatcher": "layoutmsg",
                             "argument": "movecoltoworkspace 10",
                             "flags": "",
-                            "compositor": {
-                                "type": "hyprland",
-                                "layouts": ["scrolling"]
-                            }
+                            "layouts": []
                         }
                     ],
                     "enabled": true
@@ -3163,7 +3312,7 @@ Singleton {
         if (!raw || raw.trim().length === 0) {
             // File is missing or empty — create with defaults
             console.log(name + ".json missing or empty, creating default...");
-            loader.setText(JSON.stringify(defaults, null, 4));
+            loader.setText(JSON.stringify(defaults, null, 2));
             onComplete();
             return;
         }
@@ -3174,16 +3323,43 @@ Singleton {
 
             if (JSON.stringify(current) !== JSON.stringify(validated)) {
                 console.log("Merging and updating " + name + ".json...");
-                loader.setText(JSON.stringify(validated, null, 4));
+                loader.setText(JSON.stringify(validated, null, 2));
             }
             onComplete();
         } catch (e) {
             console.log("Error validating " + name + " config (invalid JSON?): " + e);
             console.log("Overwriting with defaults due to error.");
-            loader.setText(JSON.stringify(defaults, null, 4));
+            loader.setText(JSON.stringify(defaults, null, 2));
             onComplete();
         }
     }
+
+    // Handle missing config files - copy from preset or create with defaults
+    function handleMissingConfig(name, loader, defaults, onComplete) {
+        var presetPath = root.presetDir + "/" + name + ".json";
+        var targetPath = root.configDir + "/" + name + ".json";
+        console.log(name + ".json not found, checking preset: " + presetPath);
+
+        // Create a Process component dynamically to copy the file
+        var copyProcess = Qt.createQmlObject(
+            "import QtQuick 2.0; Process { running: true; command: ['cp', '" + presetPath + "', '" + targetPath + "']; onFinished: { console.log('Copy finished for " + name + "'); } }",
+            root,
+            "copyProcess"
+        );
+
+        // Reload the loader to pick up the copied file
+        loader.reload();
+
+        // If still not ready after reload, use defaults as fallback
+        Qt.callLater(() => {
+            if (!root[name + "Ready"]) {
+                console.log("Using defaults for " + name + ".json");
+                loader.setText(JSON.stringify(defaults, null, 2));
+            }
+            onComplete();
+        });
+    }
+
 
     // Exposed properties
     // Theme configuration
@@ -3252,13 +3428,13 @@ Singleton {
         }
     }
 
-    // Hyprland configuration
-    property QtObject hyprland: hyprlandLoader.adapter
-    property int hyprlandRounding: hyprland.syncRoundness ? roundness : hyprland.rounding
-    property int hyprlandBorderSize: hyprland.syncBorderWidth ? (theme.srBg.border[1] || 0) : hyprland.borderSize
-    property string hyprlandBorderColor: hyprland.syncBorderColor ? (theme.srBg.border[0] || "primary") : (hyprland.activeBorderColor.length > 0 ? hyprland.activeBorderColor[0] : "primary")
-    property real hyprlandShadowOpacity: hyprland.syncShadowOpacity ? theme.shadowOpacity : hyprland.shadowOpacity
-    property string hyprlandShadowColor: hyprland.syncShadowColor ? theme.shadowColor : hyprland.shadowColor
+    // Compositor configuration
+    property QtObject compositor: compositorLoader.adapter
+    property int compositorRounding: compositor.syncRoundness ? roundness : compositor.rounding
+    property int compositorBorderSize: compositor.syncBorderWidth ? (theme.srBg.border[1] || 0) : compositor.borderSize
+    property string compositorBorderColor: compositor.syncBorderColor ? (theme.srBg.border[0] || "primary") : (compositor.activeBorderColor.length > 0 ? compositor.activeBorderColor[0] : "primary")
+    property real compositorShadowOpacity: compositor.syncShadowOpacity ? theme.shadowOpacity : compositor.shadowOpacity
+    property string compositorShadowColor: compositor.syncShadowColor ? theme.shadowColor : compositor.shadowColor
 
     // Performance configuration
     property QtObject performance: performanceLoader.adapter
@@ -3301,8 +3477,8 @@ Singleton {
     function saveNotch() {
         notchLoader.writeAdapter();
     }
-    function saveHyprland() {
-        hyprlandLoader.writeAdapter();
+    function saveCompositor() {
+        compositorLoader.writeAdapter();
     }
     function savePerformance() {
         performanceLoader.writeAdapter();

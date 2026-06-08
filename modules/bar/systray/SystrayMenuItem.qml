@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import qs.modules.theme
 import qs.config
-import qs.modules.components
 
 Button {
     id: root
@@ -65,17 +64,52 @@ Button {
         anchors.rightMargin: 8
 
         // Check/Radio indicator
-        Text {
+        Item {
             visible: root.buttonType > 0
             Layout.preferredWidth: 16
             Layout.preferredHeight: 16
-            text: root.buttonType === 2
-                ? (root.checkState === 2 ? "\u25C9" : "\u25CB")
-                : (root.checkState === 2 ? "\u2611" : "\u2610")
-            font.pixelSize: 14
-            color: root.hovered ? Colors.overPrimary : Colors.overBackground
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+
+            // Checkbox
+            Rectangle {
+                visible: root.buttonType === 1
+                anchors.centerIn: parent
+                width: 14
+                height: 14
+                radius: 3
+                color: root.checkState === Qt.Unchecked ? "transparent" : Colors.primary
+                border.color: root.checkState === Qt.Unchecked ? Colors.outline : Colors.primary
+                border.width: 1.5
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: root.checkState !== Qt.Unchecked
+                    text: root.checkState === Qt.PartiallyChecked ? "\u2212" : "\u2713"
+                    color: Colors.overPrimary
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+            }
+
+            // RadioButton
+            Rectangle {
+                visible: root.buttonType === 2
+                anchors.centerIn: parent
+                width: 14
+                height: 14
+                radius: 7
+                color: "transparent"
+                border.color: root.checkState === Qt.Checked ? Colors.primary : Colors.outline
+                border.width: 1.5
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    visible: root.checkState === Qt.Checked
+                    width: 7
+                    height: 7
+                    radius: 4
+                    color: Colors.primary
+                }
+            }
         }
 
         // Icon
@@ -87,27 +121,13 @@ Button {
 
             Component {
                 id: fontIcon
-                Item {
-                    width: 16
-                    height: 16
-
-                    Text {
-                        id: menuIcon
-                        anchors.fill: parent
-                        text: root.iconSource
-                        font.family: Icons.font
-                        font.pixelSize: 14
-                        color: root.hovered ? Colors.overPrimary : Colors.overBackground
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    Tinted {
-                        anchors.fill: parent
-                        sourceItem: menuIcon
-                        active: Config.tintIcons
-                        fullTint: false
-                    }
+                Text {
+                    text: root.iconSource
+                    font.family: Icons.font
+                    font.pixelSize: 14
+                    color: root.hovered ? Colors.overPrimary : Colors.overBackground
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
 
