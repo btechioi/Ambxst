@@ -573,4 +573,18 @@ Singleton {
     }
 
     property int settingsCurrentTab: 0
+
+    // ═══════════════════════════════════════════════════════════════
+    // SCREEN RESOLUTION ADAPTATION
+    // ═══════════════════════════════════════════════════════════════
+    readonly property real referenceHeight: 1080
+    readonly property real screenHeight: Quickshell.screens.length > 0 && AxctlService.focusedMonitor
+        ? AxctlService.focusedMonitor.height : 1080
+    readonly property real screenScale: Math.min(Math.max(screenHeight / referenceHeight, 0.75), 1.25)
+
+    function scalePx(px) {
+        return Math.round(px * screenScale);
+    }
+
+    readonly property int barBaseSize: scalePx(36)
 }

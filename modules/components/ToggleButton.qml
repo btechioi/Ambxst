@@ -24,8 +24,10 @@ Button {
     property real startRadius: radius
     property real endRadius: radius
 
-    implicitWidth: 36
-    implicitHeight: 36
+    readonly property int baseSize: GlobalStates.scalePx(36)
+
+    implicitWidth: baseSize
+    implicitHeight: baseSize
 
     // Check if buttonIcon is a single character (icon font) or a file path
     readonly property bool isIconPath: buttonIcon.length > 1

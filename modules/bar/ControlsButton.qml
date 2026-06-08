@@ -23,8 +23,10 @@ Item {
     // Popup visibility state (tracks intent, not animation)
     property bool popupOpen: controlsPopup.isOpen
 
-    Layout.preferredWidth: 36
-    Layout.preferredHeight: 36
+    readonly property int baseSize: GlobalStates.scalePx(36)
+
+    Layout.preferredWidth: baseSize
+    Layout.preferredHeight: baseSize
     Layout.fillWidth: vertical
     Layout.fillHeight: !vertical
 

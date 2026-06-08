@@ -394,8 +394,10 @@ Item {
 
                             sourceComponent: Button {
                                 id: pinButton
-                                implicitWidth: 36
-                                implicitHeight: 36
+                                readonly property int baseSize: GlobalStates.scalePx(36)
+
+                                implicitWidth: baseSize
+                                implicitHeight: baseSize
 
                                 background: StyledRect {
                                     id: pinButtonBg
@@ -562,7 +564,7 @@ Item {
 
                         LauncherButton {
                             id: launcherButtonVert
-                            Layout.preferredHeight: 36
+                            Layout.preferredHeight: GlobalStates.barBaseSize
                             startRadius: root.outerRadius
                             endRadius: root.innerRadius
                             vertical: true
@@ -648,8 +650,10 @@ Item {
                             
                                     sourceComponent: Button {
                                         id: pinButtonV
-                                        implicitWidth: 36
-                                        implicitHeight: 36
+                                        readonly property int baseSize: GlobalStates.scalePx(36)
+
+                                        implicitWidth: baseSize
+                                        implicitHeight: baseSize
                             
                                         background: StyledRect {
                                             id: pinButtonVBg
@@ -753,7 +757,7 @@ Item {
 
                         PowerButton {
                             id: powerButtonVert
-                            Layout.preferredHeight: 36
+                            Layout.preferredHeight: GlobalStates.barBaseSize
                             startRadius: root.innerRadius
                             endRadius: root.outerRadius
                             vertical: true

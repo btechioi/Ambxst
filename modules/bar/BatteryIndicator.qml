@@ -39,8 +39,10 @@ Item {
         return Qt.rgba(Colors.red.r + (Colors.green.r - Colors.red.r) * ratio, Colors.red.g + (Colors.green.g - Colors.red.g) * ratio, Colors.red.b + (Colors.green.b - Colors.red.b) * ratio, 1);
     }
 
-    Layout.preferredWidth: 36
-    Layout.preferredHeight: 36
+    readonly property int baseSize: GlobalStates.scalePx(36)
+
+    Layout.preferredWidth: baseSize
+    Layout.preferredHeight: baseSize
     Layout.fillWidth: vertical
     Layout.fillHeight: !vertical
 
